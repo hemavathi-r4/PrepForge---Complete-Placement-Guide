@@ -139,12 +139,91 @@ All routes are wrapped in `MainLayout`, which renders `Navbar` → animated page
 
 ---
 
-## What's Next (Stage 2 Preview)
+## What Stage 2 Builds
 
-Stage 2 will build the actual dashboard features:
-- ✅ Coding module with curated question sets
-- ✅ Aptitude practice with timer
-- ✅ User profile & progress tracking
-- ✅ Mock test engine
-- ✅ Navigation between modules
-- ✅ Connecting to real REST APIs (replace `src/services/api.js` mock implementations)
+Stage 2 delivers the complete authentication system — rebuilt from scratch over Stage 1's skeleton.
+
+---
+
+---
+
+# Stage 2 — Authentication System
+
+## What This Stage Is About
+
+Stage 2 is all about making authentication production-grade. Stage 1 had a basic login and signup card — functional, but simple. Stage 2 replaces those with a proper auth system that any real SaaS product would have: a service layer designed like a REST API, a richer context, protected and guest-only routing, and a completely redesigned UI.
+
+The goal was to build it in a way where, when we eventually connect a real backend, we change zero UI code — only the internals of the service layer.
+
+---
+
+## The Service Layer — `api.js`
+
+The biggest architectural change in Stage 2 is how `authService` is structured. Instead of each function accepting positional arguments like `login(email, password)`, every method now accepts a single **request object** — `login({ email, password, rememberMe })`. That's exactly how you'd call a real `fetch()` with a JSON body.
+
+Every method also returns a **response envelope**: `{ success, data, error }`. So callers never deal with try/catch for expected failures like "wrong password" — they just check `res.success`. Unexpected exceptions are still caught at the context level.
+
+This means when we plug in a real backend, we literally replace the `localStorage` logic inside each function with a `fetch()` call and return the JSON. The shape is already identical. Nothing else changes.
+
+**Remember Me** was also added here. If the user checks "Remember Me", the session goes into `localStorage` and survives browser close. If not, it goes into `sessionStorage` — tab-only, auto-cleared when the tab closes. The session restore on app load checks `localStorage` first, then falls back to `sessionStorage`.
+
+**Forgot Password** is a stub that always returns a success message regardless of whether the email exists — which is actually the correct security behaviour. You never want to confirm whether an email is registered or not, since that leaks account information.
+
+---
+
+## AuthContext
+
+The context was upgraded to match the new service API. It now exposes `isAuthenticated` as a clean boolean derived from `user !== null` — so components don't have to write `user !== null` everywhere. There's also a `clearError()` function that form components call whenever the user starts typing, so stale error messages from a previous failed attempt don't linger on screen. `forgotPassword` was also promoted to the context so any component in the tree can trigger it.
+
+The session restore on mount now calls `getSession()` instead of `getCurrentUser()`, which returns a proper `{ success, data }` envelope rather than throwing.
+
+---
+
+## ProtectedRoute and GuestRoute
+
+In Stage 1, `ProtectedRoute` was just an inline function inside `App.jsx`. In Stage 2 it was extracted into its own file — `src/components/ProtectedRoute.jsx` — because it has real logic now: it reads from `AuthContext`, shows a full-screen spinner while the session is being restored, and passes `location.state.from` when redirecting to login, so after login the user is sent back to wherever they were originally trying to go.
+
+We also added a `GuestRoute` inside `App.jsx` for the opposite case — if a logged-in user tries to navigate to `/login` or `/signup`, they're immediately redirected to `/dashboard`. No point letting them see the auth pages again.
+
+---
+
+## Login Page Redesign
+
+The login page was completely rebuilt as a split-screen layout. The left panel is a rich indigo gradient panel — branding, a list of PrepForge features, and a testimonial card. It's purely decorative but it signals quality. The right panel is the clean form.
+
+The form itself has a few meaningful upgrades:
+
+- **Per-field inline validation** that only shows an error after the user has blurred that field (so it doesn't shout at you before you've finished typing). On submit, all fields are touched at once if there are errors.
+- **Password visibility toggle** — the eye icon next to the password field toggles between `type="password"` and `type="text"`.
+- **Remember Me** is a custom-styled checkbox (not a plain HTML checkbox) that toggles a boolean passed to `authService.login()`.
+- **Forgot Password** is a link next to the password label that opens a modal. The modal collects an email, calls `authService.forgotPassword()`, and shows the response message. It's self-contained — opening and closing it doesn't affect the login form state at all.
+- Animated error messages using `AnimatePresence` — errors fade in, and fade out when the user fixes the field.
+
+---
+
+## Signup Page Redesign
+
+The signup page mirrors the login layout — same split-screen structure with a slightly different left panel (benefits checklist and stats instead of a testimonial).
+
+The form adds two things beyond basic validation:
+
+- **Password strength indicator** — a 3-segment bar that scores the password on length, uppercase, numbers, and special characters. It turns red (Weak), amber (Fair), or green (Strong) in real time as you type.
+- **Confirm password match indicator** — as soon as you start typing in the confirm field, it shows "✓ Passwords match" or "✗ Passwords do not match" inline, without waiting for blur or submit.
+
+Both password fields have independent visibility toggles.
+
+---
+
+## What Stays the Same
+
+Everything from Stage 1 that wasn't auth-related was left untouched — the Navbar, Footer, MainLayout, LandingPage, DashboardPage, and all mock data. Stage 2 is purely a vertical slice through the auth system.
+
+---
+
+## What's Next (Stage 3 Preview)
+
+Stage 3 will build out the actual dashboard features:
+- Coding module with curated question sets
+- Aptitude practice with timer
+- User profile and progress tracking
+- Mock test engine with question flow
