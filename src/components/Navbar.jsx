@@ -17,6 +17,8 @@ const Navbar = () => {
 
   const navLinks = [
     { name: "Home", path: "/" },
+    { name: "DSA Sheet", path: "/dsa-sheet" },
+    { name: "SQL Sheet", path: "/sql-sheet" },
     ...(user ? [{ name: "Dashboard", path: "/dashboard" }] : []),
   ];
 

@@ -2,12 +2,15 @@ import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { useAuth } from "./context/AuthContext";
+import { SheetProgressProvider } from "./context/SheetProgressContext";
 import MainLayout from "./layouts/MainLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import DashboardPage from "./pages/DashboardPage";
+import DSASheetPage from "./pages/DSASheetPage";
+import SQLSheetPage from "./pages/SQLSheetPage";
 
 /**
  * GuestRoute — redirects already-authenticated users away from
@@ -27,6 +30,8 @@ const AppRoutes = () => (
 
       {/* ── Public ─────────────────────────────────────── */}
       <Route path="/" element={<LandingPage />} />
+      <Route path="/dsa-sheet" element={<DSASheetPage />} />
+      <Route path="/sql-sheet" element={<SQLSheetPage />} />
 
       {/* ── Auth pages (redirect to dashboard if logged in) */}
       <Route
@@ -66,7 +71,9 @@ const AppRoutes = () => (
 const App = () => (
   <BrowserRouter>
     <AuthProvider>
-      <AppRoutes />
+      <SheetProgressProvider>
+        <AppRoutes />
+      </SheetProgressProvider>
     </AuthProvider>
   </BrowserRouter>
 );
