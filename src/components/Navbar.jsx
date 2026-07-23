@@ -19,6 +19,8 @@ const Navbar = () => {
     { name: "Home", path: "/" },
     { name: "DSA Sheet", path: "/dsa-sheet" },
     { name: "SQL Sheet", path: "/sql-sheet" },
+    { name: "CS Fundamentals", path: "/cs-fundamentals" },
+    { name: "Company Sheets", path: "/company-sheets" },
     ...(user ? [{ name: "Dashboard", path: "/dashboard" }] : []),
   ];
 

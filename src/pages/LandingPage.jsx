@@ -226,7 +226,7 @@ const LandingPage = () => {
                 <div className="pt-6 mt-6 border-t border-gray-50 flex items-center justify-between text-xs text-gray-400">
                   <span className="font-semibold">{module.topicsCount} lessons</span>
                   <Link 
-                    to={user ? "/dashboard" : "/login"}
+                    to={module.path || "/dsa-sheet"}
                     className="flex items-center space-x-1 text-indigo-600 font-bold hover:text-indigo-700 transition-colors"
                   >
                     <span>Start learning</span>

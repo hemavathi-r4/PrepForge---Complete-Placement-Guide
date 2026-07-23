@@ -220,10 +220,61 @@ Everything from Stage 1 that wasn't auth-related was left untouched — the Navb
 
 ---
 
-## What's Next (Stage 3 Preview)
+## Stage 3 Delivered Features
 
-Stage 3 will build out the actual dashboard features:
-- Coding module with curated question sets
-- Aptitude practice with timer
-- User profile and progress tracking
-- Mock test engine with question flow
+Stage 3 builds out the full placement preparation ecosystem: CS Fundamentals, Company-Wise DSA Sheets, expanded DSA & SQL sheets, and integrated progress tracking.
+
+---
+
+---
+
+# Stage 3 — Placement Resource Ecosystem & Track Expansion (DSA, SQL, CS Fundamentals, Company Sheets)
+
+## What This Stage Is About
+
+Stage 3 transforms PrepForge into a complete, placement-ready learning ecosystem. It introduces:
+1. **CS Fundamentals Portal (`/cs-fundamentals`)**: Comprehensive tracks for DBMS, Computer Networks, OOPs, and System Design with embedded GeeksforGeeks (GFG) references, concept rule summaries, interview Q&As, and architecture/code snippet readers.
+2. **Company-Wise DSA Sheet Section (`/company-sheets`)**: Targeted question banks for top recruitment companies (Google, Amazon, Microsoft, Meta, TCS, Infosys, Wipro, Flipkart, Uber, Adobe, Apple, Goldman Sachs, Paytm) featuring difficulty filters, frequency metrics, embedded GFG & LeetCode links, and full C++/Python solution modals.
+3. **Comprehensive DSA & SQL Sheets**: 13 DSA topics and 10 SQL topics with structured data schemas, LeetCode links, GFG links, complexity bounds, and DDL/DML queries.
+4. **Interactive State Management**: Global tracking of solved problems and bookmarked questions via `SheetProgressContext`.
+
+---
+
+## Technical Architecture & Component Breakdown
+
+### 1. CS Fundamentals Data & Portal Engine (`csFundamentalsData.js` & `CSFundamentalsPage.jsx`)
+- **Data Structure**: `CS_FUNDAMENTALS_CATEGORIES` contains structured data objects for:
+  - `dbms`: ER Modeling, Relational Schema, Normalization (1NF to BCNF), Indexing & B+ Trees, ACID Properties & Transactions, Concurrency Control, SQL vs NoSQL.
+  - `cn`: OSI 7-Layer & TCP/IP 4-Layer models, Subnetting & IP Routing, TCP 3-Way Handshake vs UDP, HTTP/HTTPS, SSL/TLS, DNS Resolution.
+  - `oops`: 4 Pillars (Encapsulation, Abstraction, Inheritance, Polymorphism), Access Specifiers, Vtables & Dynamic Dispatch, SOLID Principles.
+  - `system-design`: HLD (Load Balancers, Caching - Redis/Memcached, Database Sharding/Replication, Message Queues - Kafka, CAP Theorem) and LLD Design Patterns.
+- **Embedded External References**: Every topic links directly to authoritative GeeksforGeeks tutorials via `gfgUrl` and category-level `gfgHubUrl`.
+- **UI & Micro-Interactions**:
+  - Filterable search bar querying across topic titles, summaries, and key concept rules.
+  - Category selector tabs with Framer Motion animations.
+  - Interactive Interview Q&A drawers and copy-to-clipboard code snippet boxes.
+
+### 2. Company-Wise DSA Sheet Engine (`companyDsaData.js` & `CompanySheetsPage.jsx`)
+- **Recruiter Question Datasets**: `COMPANY_DSA_LIST` covers top placement companies (Google, Amazon, Microsoft, Meta, TCS, Infosys, Wipro, Flipkart, Uber, Adobe, Apple, Goldman Sachs, Paytm).
+- **Metadata**: Each question records title, topic tag, difficulty, frequency metric (e.g., "Asked 42+ times"), embedded `leetcodeUrl`, and embedded `gfgUrl`.
+- **Solution Modal (`AnimatePresence`)**:
+  - Displays problem statement, optimal approach breakdown, and exact time/space complexities.
+  - Tabbed syntax-highlighted C++ and Python solution code editor with copy capability.
+
+### 3. Integrated Progress Context (`SheetProgressContext.jsx`)
+- Extends global app state to persist solved problems and bookmarked items into `localStorage`.
+- Syncs seamlessly between DSA Sheets (`/dsa-sheet`), SQL Sheets (`/sql-sheet`), and Company-Wise DSA Sheets (`/company-sheets`).
+
+### 4. Routing & Navigation Update
+- **`Navbar.jsx`**: Updated top navigation header with desktop and mobile responsive links for **CS Fundamentals** and **Company Sheets**.
+- **`App.jsx`**: Registered `/cs-fundamentals` and `/company-sheets` routes wrapped inside `MainLayout`.
+- **`LandingPage.jsx` & `DashboardPage.jsx`**: Updated feature cards to provide quick navigation directly to the newly implemented tracks.
+
+---
+
+## Build & Production Verification
+
+- **Vite Build Command**: `npm run build`
+- **Modules Transformed**: 458 modules transformed with 0 errors.
+- **Assets Bundled**: `index.html`, `index.css` (72.9 kB), `index.js` (573.7 kB).
+

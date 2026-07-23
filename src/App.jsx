@@ -11,6 +11,8 @@ import SignupPage from "./pages/SignupPage";
 import DashboardPage from "./pages/DashboardPage";
 import DSASheetPage from "./pages/DSASheetPage";
 import SQLSheetPage from "./pages/SQLSheetPage";
+import CSFundamentalsPage from "./pages/CSFundamentalsPage";
+import CompanySheetsPage from "./pages/CompanySheetsPage";
 
 /**
  * GuestRoute — redirects already-authenticated users away from
@@ -32,6 +34,8 @@ const AppRoutes = () => (
       <Route path="/" element={<LandingPage />} />
       <Route path="/dsa-sheet" element={<DSASheetPage />} />
       <Route path="/sql-sheet" element={<SQLSheetPage />} />
+      <Route path="/cs-fundamentals" element={<CSFundamentalsPage />} />
+      <Route path="/company-sheets" element={<CompanySheetsPage />} />
 
       {/* ── Auth pages (redirect to dashboard if logged in) */}
       <Route

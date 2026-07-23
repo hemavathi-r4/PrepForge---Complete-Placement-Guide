@@ -182,11 +182,14 @@ const DashboardPage = () => {
                   </div>
                 </div>
                 <div className="flex items-center justify-between pt-2 border-t border-gray-50">
-                  <span className="text-xs text-gray-400 font-medium">{module.topicsCount} lessons</span>
-                  <button className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors">
-                    <FaLock className="h-3 w-3" />
-                    <span>Coming Soon</span>
-                  </button>
+                  <span className="text-xs text-gray-400 font-medium">{module.topicsCount} questions</span>
+                  <Link
+                    to={module.path || "/dsa-sheet"}
+                    className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+                  >
+                    <span>Practice Now</span>
+                    <FaArrowRight className="h-3 w-3" />
+                  </Link>
                 </div>
               </motion.div>
             ))}
