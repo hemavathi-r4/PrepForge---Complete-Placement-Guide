@@ -1,16 +1,92 @@
-# React + Vite
+# PrepForge — Placement Preparation Platform
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+PrepForge is a comprehensive web application for placement preparation, featuring DSA sheets, SQL challenges, CS fundamentals, company-wise problem sets, and mock assessments.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Project Structure
 
-## React Compiler
+PrepForge currently contains:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Frontend
+- **Framework:** React 19 + Vite
+- **Styling:** Tailwind CSS v4 + Framer Motion
+- **Routing:** React Router DOM v7
 
-## Expanding the Oxlint configuration
+### Backend
+- **Runtime:** Node.js (ES Modules)
+- **Framework:** Express.js
+- **Database:** MongoDB via Mongoose ORM
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+```
+PrepForge/
+├── frontend code (root & src/)
+├── backend/
+│   ├── config/          # Database configuration (db.js)
+│   ├── controllers/     # Controller handlers (healthController.js)
+│   ├── middleware/      # Global middleware (errorMiddleware.js)
+│   ├── models/          # Mongoose schema models
+│   ├── routes/          # API route definitions (healthRoutes.js)
+│   ├── services/        # Business logic services
+│   ├── utils/           # Helper utility functions
+│   ├── .env             # Local environment variables
+│   ├── .env.example     # Environment variable template
+│   ├── app.js           # Express app instance setup & middleware
+│   ├── server.js        # Backend entrypoint (DB connection & HTTP listener)
+│   └── package.json     # Node.js dependencies & scripts
+└── README.md
+```
+
+---
+
+## How to Run the Backend
+
+1. **Navigate to the backend directory:**
+   ```bash
+   cd backend
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Configure Environment Variables:**
+   Copy `.env.example` to `.env` and fill in your connection details:
+   ```bash
+   cp .env.example .env
+   ```
+
+   Required environment variables:
+   - `PORT`: Port number for the Express server (default: `5000`)
+   - `MONGO_URI`: MongoDB connection URI (e.g., `mongodb://127.0.0.1:27017/prepforge` or MongoDB Atlas URI)
+   - `CLIENT_ORIGIN`: Allowed frontend origin for CORS (default: `http://localhost:5173`)
+   - `NODE_ENV`: Environment mode (`development` or `production`)
+
+4. **Start the development server:**
+   ```bash
+   npm run dev
+   ```
+
+---
+
+## Health Check Endpoint
+
+- **Endpoint:** `GET http://localhost:5000/api/health`
+- **Response:**
+  ```json
+  {
+    "success": true,
+    "message": "PrepForge API is running"
+  }
+  ```
+
+---
+
+## How to Run the Frontend
+
+1. From the project root directory:
+   ```bash
+   npm install
+   npm run dev
+   ```
