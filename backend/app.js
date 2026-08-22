@@ -1,7 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import healthRoutes from './routes/healthRoutes.js';
-import { notFound, errorHandler } from './middleware/errorMiddleware.js';
+import authRoutes from './routes/authRoutes.js';
+import notFound from './middleware/notFoundMiddleware.js';
+import errorHandler from './middleware/errorMiddleware.js';
 
 const app = express();
 
@@ -22,6 +24,7 @@ app.use(
 
 // API Routes
 app.use('/api/health', healthRoutes);
+app.use('/api/auth', authRoutes);
 
 // Error Handling Middleware
 app.use(notFound);

@@ -13,6 +13,8 @@ import DSASheetPage from "./pages/DSASheetPage";
 import SQLSheetPage from "./pages/SQLSheetPage";
 import CSFundamentalsPage from "./pages/CSFundamentalsPage";
 import CompanySheetsPage from "./pages/CompanySheetsPage";
+import AptitudePage from "./pages/AptitudePage";
+import AIMockInterviewPage from "./pages/AIMockInterviewPage";
 
 /**
  * GuestRoute — redirects already-authenticated users away from
@@ -36,6 +38,7 @@ const AppRoutes = () => (
       <Route path="/sql-sheet" element={<SQLSheetPage />} />
       <Route path="/cs-fundamentals" element={<CSFundamentalsPage />} />
       <Route path="/company-sheets" element={<CompanySheetsPage />} />
+      <Route path="/aptitude" element={<AptitudePage />} />
 
       {/* ── Auth pages (redirect to dashboard if logged in) */}
       <Route
@@ -61,6 +64,14 @@ const AppRoutes = () => (
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/ai-interview"
+        element={
+          <ProtectedRoute>
+            <AIMockInterviewPage />
           </ProtectedRoute>
         }
       />

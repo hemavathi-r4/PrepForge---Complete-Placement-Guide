@@ -10,20 +10,25 @@ import {
   FaUsers, 
   FaFileAlt,
   FaArrowRight,
-  FaCheckCircle
+  FaCheckCircle,
+  FaCalculator,
+  FaRobot
 } from "react-icons/fa";
 import { motion } from "framer-motion";
 
 // Helper to resolve icon key to react-icon component
 const getIcon = (iconName) => {
+  const cls = "h-6 w-6 text-indigo-600";
   switch (iconName) {
-    case "code": return <FaCode className="h-6 w-6 text-indigo-650" />;
-    case "trending-up": return <FaChartLine className="h-6 w-6 text-indigo-650" />;
-    case "git-branch": return <FaNetworkWired className="h-6 w-6 text-indigo-650" />;
-    case "database": return <FaDatabase className="h-6 w-6 text-indigo-650" />;
-    case "users": return <FaUsers className="h-6 w-6 text-indigo-650" />;
-    case "document": return <FaFileAlt className="h-6 w-6 text-indigo-650" />;
-    default: return <FaCode className="h-6 w-6 text-indigo-650" />;
+    case "code": return <FaCode className={cls} />;
+    case "trending-up": return <FaChartLine className={cls} />;
+    case "git-branch": return <FaNetworkWired className={cls} />;
+    case "database": return <FaDatabase className={cls} />;
+    case "users": return <FaUsers className={cls} />;
+    case "document": return <FaFileAlt className={cls} />;
+    case "calculator": return <FaCalculator className={cls} />;
+    case "robot": return <FaRobot className={cls} />;
+    default: return <FaCode className={cls} />;
   }
 };
 
@@ -203,7 +208,7 @@ const LandingPage = () => {
               >
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600">
+                    <div className="p-3 bg-indigo-50 rounded-xl">
                       {getIcon(module.icon)}
                     </div>
                     {module.popular && (

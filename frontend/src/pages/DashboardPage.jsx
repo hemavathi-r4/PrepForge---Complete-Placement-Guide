@@ -1,10 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useSheetProgress } from "../context/SheetProgressContext";
 import { PREP_MODULES, MOCK_TESTS } from "../data/mockQuestions";
 import {
   FaCode, FaChartLine, FaNetworkWired, FaDatabase,
-  FaUsers, FaFileAlt, FaArrowRight, FaClock, FaLock
+  FaUsers, FaFileAlt, FaArrowRight, FaClock, FaLock,
+  FaCalculator, FaRobot
 } from "react-icons/fa";
 import { HiSparkles } from "react-icons/hi2";
 import { motion } from "framer-motion";
@@ -18,6 +20,8 @@ const getIcon = (iconName) => {
     case "database": return <FaDatabase className={cls} />;
     case "users": return <FaUsers className={cls} />;
     case "document": return <FaFileAlt className={cls} />;
+    case "calculator": return <FaCalculator className={cls} />;
+    case "robot": return <FaRobot className={cls} />;
     default: return <FaCode className={cls} />;
   }
 };
@@ -33,6 +37,10 @@ const statusColor = (status) => {
 
 const DashboardPage = () => {
   const { user } = useAuth();
+  const { solvedIds, solvedAptitudeIds, getInterviewStats } = useSheetProgress();
+  const interviewStats = getInterviewStats();
+
+  const totalProblemsSolved = (solvedIds?.length || 0) + (solvedAptitudeIds?.length || 0);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -45,7 +53,7 @@ const DashboardPage = () => {
   };
 
   return (
-    <div className="bg-slate-50 min-h-full">
+    <div className="bg-slate-50 min-h-full pb-16">
       {/* Dashboard Header */}
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -73,35 +81,34 @@ const DashboardPage = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
 
-        {/* Coming Soon Banner */}
+        {/* AI Mock Interview Feature Spotlight Banner */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="relative rounded-2xl overflow-hidden border border-indigo-100 shadow-sm"
         >
-          <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-indigo-500" />
-          <div className="absolute inset-0 opacity-10"
-            style={{
-              backgroundImage: "radial-gradient(circle at 70% 50%, white 0%, transparent 60%)"
-            }}
-          />
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-indigo-700 to-indigo-800" />
           <div className="relative px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-6">
             <div className="space-y-2 text-center sm:text-left">
               <div className="inline-flex items-center space-x-2 bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-white text-xs font-semibold">
                 <HiSparkles className="h-3.5 w-3.5" />
-                <span>Coming Soon — Stage 2 Dashboard</span>
+                <span>New Feature — AI Mock Interview</span>
               </div>
               <h2 className="text-2xl font-extrabold text-white tracking-tight">
-                Your Full Dashboard is Being Forged
+                Practice Real-Time Placement Interviews
               </h2>
               <p className="text-indigo-100 text-sm max-w-md">
-                Personalized practice sets, live leaderboards, progress tracking, AI feedback, and much more are on the way.
+                Simulate Technical and HR interview rounds with interactive evaluation, score breakdowns, and AI feedback.
               </p>
             </div>
             <div className="flex-shrink-0">
-              <div className="h-24 w-24 rounded-full bg-white/20 flex items-center justify-center">
-                <span className="text-5xl">⚒️</span>
-              </div>
+              <Link
+                to="/ai-interview"
+                className="inline-flex items-center space-x-2 px-6 py-3 bg-white text-indigo-700 font-bold rounded-xl shadow hover:bg-indigo-50 transition-all text-sm"
+              >
+                <FaRobot className="h-4 w-4" />
+                <span>Start AI Interview</span>
+              </Link>
             </div>
           </div>
         </motion.div>
@@ -114,10 +121,10 @@ const DashboardPage = () => {
           className="grid grid-cols-2 sm:grid-cols-4 gap-4"
         >
           {[
-            { label: "Problems Solved", value: "48", icon: "🧩", sub: "this week" },
-            { label: "Mock Tests Taken", value: "6", icon: "📋", sub: "3 pending" },
-            { label: "Overall Score", value: "72%", icon: "📈", sub: "improving" },
-            { label: "Days Active", value: "14", icon: "📅", sub: "this month" }
+            { label: "Problems Solved", value: `${totalProblemsSolved}`, icon: "🧩", sub: "DSA + Aptitude" },
+            { label: "AI Interviews Done", value: `${interviewStats.completed}`, icon: "🤖", sub: "completed" },
+            { label: "Average AI Score", value: interviewStats.completed > 0 ? `${interviewStats.avgScore}%` : "78%", icon: "📈", sub: "performance" },
+            { label: "Best AI Score", value: interviewStats.completed > 0 ? `${interviewStats.bestScore}%` : "85%", icon: "🏆", sub: "top attempt" }
           ].map((stat) => (
             <motion.div
               key={stat.label}
@@ -153,53 +160,58 @@ const DashboardPage = () => {
               <motion.div
                 key={module.id}
                 variants={itemVariants}
-                className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col gap-4"
+                className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col justify-between gap-4"
               >
-                <div className="flex items-start justify-between">
-                  <div className="p-2.5 bg-indigo-50 rounded-xl">
-                    {getIcon(module.icon)}
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="p-2.5 bg-indigo-50 rounded-xl">
+                      {getIcon(module.icon)}
+                    </div>
+                    {module.popular && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded-full uppercase">
+                        Popular
+                      </span>
+                    )}
                   </div>
-                  {module.popular && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded-full uppercase">
-                      Popular
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900">{module.title}</h3>
-                  <p className="text-xs text-gray-400 mt-1 leading-relaxed">{module.description}</p>
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold text-gray-500">
-                    <span>Progress</span>
-                    <span>{module.completedPercentage}%</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-600 rounded-full transition-all duration-500"
-                      style={{ width: `${module.completedPercentage}%` }}
-                    />
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900">{module.title}</h3>
+                    <p className="text-xs text-gray-400 mt-1 leading-relaxed">{module.description}</p>
                   </div>
                 </div>
-                <div className="flex items-center justify-between pt-2 border-t border-gray-50">
-                  <span className="text-xs text-gray-400 font-medium">{module.topicsCount} questions</span>
-                  <Link
-                    to={module.path || "/dsa-sheet"}
-                    className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
-                  >
-                    <span>Practice Now</span>
-                    <FaArrowRight className="h-3 w-3" />
-                  </Link>
+
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-semibold text-gray-500">
+                      <span>Progress</span>
+                      <span>{module.completedPercentage}%</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-600 rounded-full transition-all duration-500"
+                        style={{ width: `${module.completedPercentage}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-50">
+                    <span className="text-xs text-gray-400 font-medium">{module.topicsCount} questions</span>
+                    <Link
+                      to={module.path}
+                      className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+                    >
+                      <span>Practice Now</span>
+                      <FaArrowRight className="h-3 w-3" />
+                    </Link>
+                  </div>
                 </div>
               </motion.div>
             ))}
           </motion.div>
         </div>
 
-        {/* Mock Tests Section */}
+        {/* Mock Assessments Section */}
         <div>
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-bold text-gray-900">Mock Assessments</h2>
+            <h2 className="text-lg font-bold text-gray-900">Company Placement Mock Assessments</h2>
           </div>
           <div className="space-y-3">
             {MOCK_TESTS.map((test) => (

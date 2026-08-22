@@ -1,14 +1,4 @@
 /**
- * 404 Not Found Middleware
- * Handles requests to undefined endpoints
- */
-export const notFound = (req, res, next) => {
-  const error = new Error(`Route not found - ${req.originalUrl}`);
-  res.status(404);
-  next(error);
-};
-
-/**
  * Centralized Error Handling Middleware
  * Formats errors into a consistent JSON structure
  */
@@ -21,3 +11,5 @@ export const errorHandler = (err, req, res, next) => {
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 };
+
+export default errorHandler;

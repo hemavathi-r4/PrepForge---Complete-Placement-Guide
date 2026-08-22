@@ -19,8 +19,10 @@ const Navbar = () => {
     { name: "Home", path: "/" },
     { name: "DSA Sheet", path: "/dsa-sheet" },
     { name: "SQL Sheet", path: "/sql-sheet" },
+    { name: "Aptitude", path: "/aptitude" },
     { name: "CS Fundamentals", path: "/cs-fundamentals" },
     { name: "Company Sheets", path: "/company-sheets" },
+    { name: "AI Mock Interview", path: "/ai-interview" },
     ...(user ? [{ name: "Dashboard", path: "/dashboard" }] : []),
   ];
 
@@ -39,7 +41,7 @@ const Navbar = () => {
           </div>
 
           {/* Desktop Nav Links */}
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden lg:flex items-center space-x-6">
             {navLinks.map((link) => (
               <NavLink
                 key={link.path}
@@ -47,7 +49,7 @@ const Navbar = () => {
                 className={({ isActive }) =>
                   `text-sm font-medium transition-colors duration-200 ${
                     isActive
-                      ? "text-indigo-600"
+                      ? "text-indigo-600 font-bold"
                       : "text-gray-600 hover:text-indigo-600"
                   }`
                 }
@@ -58,7 +60,7 @@ const Navbar = () => {
           </div>
 
           {/* Desktop User Info / Actions */}
-          <div className="hidden md:flex items-center space-x-4">
+          <div className="hidden lg:flex items-center space-x-4">
             {user ? (
               <div className="flex items-center space-x-4">
                 <Link to="/dashboard" className="flex items-center space-x-2 text-gray-700 hover:text-indigo-600 transition-colors">
@@ -92,7 +94,7 @@ const Navbar = () => {
           </div>
 
           {/* Mobile menu button */}
-          <div className="flex items-center md:hidden">
+          <div className="flex items-center lg:hidden">
             <button
               onClick={() => setIsOpen(!isOpen)}
               className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none transition-colors"
@@ -110,7 +112,7 @@ const Navbar = () => {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden border-b border-gray-150 bg-white"
+            className="lg:hidden border-b border-gray-150 bg-white"
           >
             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
               {navLinks.map((link) => (

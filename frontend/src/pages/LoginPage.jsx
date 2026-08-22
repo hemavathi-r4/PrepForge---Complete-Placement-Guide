@@ -159,15 +159,9 @@ const LoginPage = () => {
     if (ok) navigate(redirectTo, { replace: true });
   };
 
-  // Autofill demo account (creates it if missing)
+  // Autofill demo account
   const autofill = () => {
-    const DEMO = { email: "demo@prepforge.com", password: "password123", name: "Demo Student" };
-    const users = JSON.parse(localStorage.getItem("prepforge_users") || "[]");
-    if (!users.some((u) => u.email === DEMO.email)) {
-      users.push({ id: "usr_demo", ...DEMO, role: "student", joinedAt: new Date().toISOString() });
-      localStorage.setItem("prepforge_users", JSON.stringify(users));
-    }
-    setFields({ email: DEMO.email, password: DEMO.password });
+    setFields({ email: "test@example.com", password: "password123" });
     setErrors({});
     clearError();
   };
