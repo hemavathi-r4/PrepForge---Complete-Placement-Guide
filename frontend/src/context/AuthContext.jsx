@@ -107,10 +107,19 @@ export const AuthProvider = ({ children }) => {
     };
   };
 
+  const updateUser = (updatedUser) => {
+    if (updatedUser) {
+      setUser(updatedUser);
+      localStorage.setItem("prepforge_current_user", JSON.stringify(updatedUser));
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
+        setUser,
+        updateUser,
         isAuthenticated,
         loading,
         signup,

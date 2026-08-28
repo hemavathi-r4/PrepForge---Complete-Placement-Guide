@@ -28,7 +28,17 @@ export const registerUser = async ({ name, email, password }) => {
     user: {
       id: user._id.toString(),
       name: user.name,
-      email: user.email
+      email: user.email,
+      college: user.college,
+      bio: user.bio,
+      avatar: user.avatar,
+      github: user.github,
+      linkedin: user.linkedin,
+      leetcode: user.leetcode,
+      codeforces: user.codeforces,
+      codechef: user.codechef,
+      geeksforgeeks: user.geeksforgeeks,
+      createdAt: user.createdAt
     },
     token
   };
@@ -59,7 +69,17 @@ export const loginUser = async ({ email, password }) => {
     user: {
       id: user._id.toString(),
       name: user.name,
-      email: user.email
+      email: user.email,
+      college: user.college,
+      bio: user.bio,
+      avatar: user.avatar,
+      github: user.github,
+      linkedin: user.linkedin,
+      leetcode: user.leetcode,
+      codeforces: user.codeforces,
+      codechef: user.codechef,
+      geeksforgeeks: user.geeksforgeeks,
+      createdAt: user.createdAt
     },
     token
   };
@@ -76,7 +96,17 @@ export const getUserById = async (id) => {
   return {
     id: user._id.toString(),
     name: user.name,
-    email: user.email
+    email: user.email,
+    college: user.college,
+    bio: user.bio,
+    avatar: user.avatar,
+    github: user.github,
+    linkedin: user.linkedin,
+    leetcode: user.leetcode,
+    codeforces: user.codeforces,
+    codechef: user.codechef,
+    geeksforgeeks: user.geeksforgeeks,
+    createdAt: user.createdAt
   };
 };
 

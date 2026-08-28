@@ -15,6 +15,8 @@ import CSFundamentalsPage from "./pages/CSFundamentalsPage";
 import CompanySheetsPage from "./pages/CompanySheetsPage";
 import AptitudePage from "./pages/AptitudePage";
 import AIMockInterviewPage from "./pages/AIMockInterviewPage";
+import ProfilePage from "./pages/ProfilePage";
+import SettingsPage from "./pages/SettingsPage";
 
 /**
  * GuestRoute — redirects already-authenticated users away from
@@ -64,6 +66,22 @@ const AppRoutes = () => (
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <SettingsPage />
           </ProtectedRoute>
         }
       />

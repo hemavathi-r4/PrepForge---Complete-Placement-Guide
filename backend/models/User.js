@@ -21,6 +21,51 @@ const userSchema = new mongoose.Schema(
       required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters'],
       select: false
+    },
+    college: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    bio: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    avatar: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    github: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    linkedin: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    leetcode: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    codeforces: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    codechef: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    geeksforgeeks: {
+      type: String,
+      default: '',
+      trim: true
     }
   },
   {

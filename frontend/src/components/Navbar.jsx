@@ -60,18 +60,42 @@ const Navbar = () => {
           </div>
 
           {/* Desktop User Info / Actions */}
-          <div className="hidden lg:flex items-center space-x-4">
+          <div className="hidden lg:flex items-center space-x-3">
             {user ? (
-              <div className="flex items-center space-x-4">
-                <Link to="/dashboard" className="flex items-center space-x-2 text-gray-700 hover:text-indigo-600 transition-colors">
-                  <FaUserCircle className="h-5 w-5 text-gray-400" />
-                  <span className="text-sm font-medium">{user.name}</span>
+              <div className="flex items-center space-x-2">
+                <Link
+                  to="/profile"
+                  className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-gray-700 hover:bg-gray-50 hover:text-indigo-600 transition-colors"
+                  title="View Profile"
+                >
+                  {user.avatar ? (
+                    <img
+                      src={user.avatar}
+                      alt={user.name}
+                      className="h-6 w-6 rounded-full object-cover border border-indigo-200"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = "";
+                      }}
+                    />
+                  ) : (
+                    <FaUserCircle className="h-5 w-5 text-gray-400" />
+                  )}
+                  <span className="text-sm font-semibold">{user.name?.split(" ")[0]}</span>
+                </Link>
+                <Link
+                  to="/settings"
+                  className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-gray-50 rounded-lg transition-colors"
+                  title="Account Settings"
+                >
+                  <span className="text-xs font-medium">Settings</span>
                 </Link>
                 <button
                   onClick={handleLogout}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 border border-transparent text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-50 hover:text-red-600 transition-all duration-150"
+                  className="flex items-center space-x-1 px-3 py-1.5 border border-transparent text-xs font-medium rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-all duration-150"
+                  title="Sign Out"
                 >
-                  <FaSignOutAlt className="h-4 w-4" />
+                  <FaSignOutAlt className="h-3.5 w-3.5" />
                   <span>Logout</span>
                 </button>
               </div>
@@ -144,24 +168,38 @@ const Navbar = () => {
                       <div className="text-sm font-medium text-gray-500">{user.email}</div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <Link
                       to="/dashboard"
                       onClick={() => setIsOpen(false)}
-                      className="w-full text-center px-4 py-2 border border-gray-200 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                      className="w-full text-center px-2.5 py-2 border border-gray-200 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
                     >
                       Dashboard
                     </Link>
-                    <button
-                      onClick={() => {
-                        setIsOpen(false);
-                        handleLogout();
-                      }}
-                      className="w-full text-center px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors"
+                    <Link
+                      to="/profile"
+                      onClick={() => setIsOpen(false)}
+                      className="w-full text-center px-2.5 py-2 border border-gray-200 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
                     >
-                      Logout
-                    </button>
+                      Profile
+                    </Link>
+                    <Link
+                      to="/settings"
+                      onClick={() => setIsOpen(false)}
+                      className="w-full text-center px-2.5 py-2 border border-gray-200 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                    >
+                      Settings
+                    </Link>
                   </div>
+                  <button
+                    onClick={() => {
+                      setIsOpen(false);
+                      handleLogout();
+                    }}
+                    className="w-full text-center px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors"
+                  >
+                    Logout
+                  </button>
                 </div>
               ) : (
                 <div className="flex flex-col space-y-2">

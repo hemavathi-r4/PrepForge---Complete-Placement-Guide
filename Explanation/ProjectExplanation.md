@@ -203,6 +203,15 @@ const { user, login, logout } = useAuth();
 - [ ] Add dark‑mode toggle UI and persist preference.
 - [ ] Document public component API in a `docs/` folder for future contributors.
 
----
-
-*Prepared by Antigravity – your AI coding partner.*
+## Stage 3 Implementation Checklist (Completed)
+- [x] Update Database Model (`backend/models/User.js`)
+- [x] Implement Backend Service Layer (`backend/services/userService.js`)
+- [x] Implement Backend Controller Layer (`backend/controllers/userController.js`)
+- [x] Implement Backend Router Layer (`backend/routes/userRoutes.js`)
+- [x] Mount Routes in Backend App (`backend/app.js`)
+- [x] Implement Frontend Service Layer (`frontend/src/services/userService.js`)
+- [x] Implement Frontend Profile Page (`frontend/src/pages/ProfilePage.jsx`)
+- [x] Implement Frontend Settings Page (`frontend/src/pages/SettingsPage.jsx`)
+- [x] Add Frontend Routing in App (`frontend/src/App.jsx`)
+- [x] Update Navbar Navigation (`frontend/src/components/Navbar.jsx`)
+- [x] Add Full Backend Stage 3 Documentation (`backend/Backend_exp.md`)
