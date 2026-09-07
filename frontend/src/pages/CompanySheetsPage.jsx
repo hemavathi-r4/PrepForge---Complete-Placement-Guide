@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from "react";
-import { COMPANY_DSA_LIST } from "../data/companyDsaData";
+import React, { useState, useEffect, useMemo } from "react";
+import { COMPANY_DSA_LIST as LOCAL_COMPANY_LIST } from "../data/companyDsaData";
+import { fetchCompanies, fetchCompanyQuestions } from "../services/companyService";
 import { 
   FaBuilding, 
   FaExternalLinkAlt, 
@@ -22,14 +23,84 @@ const CompanySheetsPage = () => {
   const [activeCodeTab, setActiveCodeTab] = useState("cpp");
   const [copiedCode, setCopiedCode] = useState(false);
 
+  const [companiesList, setCompaniesList] = useState(LOCAL_COMPANY_LIST);
+  const [companyQuestions, setCompanyQuestions] = useState([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(true);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+  const [error, setError] = useState(null);
+
   const { isSolved, toggleSolved } = useSheetProgress();
 
-  const currentCompany = useMemo(() => {
-    return COMPANY_DSA_LIST.find((c) => c.id === selectedCompanyId) || COMPANY_DSA_LIST[0];
+  // Load companies list from backend API
+  useEffect(() => {
+    const loadCompanies = async () => {
+      setLoadingCompanies(true);
+      const res = await fetchCompanies();
+      if (res.success && res.companies && res.companies.length > 0) {
+        const formattedCompanies = res.companies.map((c) => ({
+          id: c.slug,
+          name: c.name,
+          tier: c.tier || "Top Tech",
+          description: c.description || "",
+          totalQuestions: c.totalQuestions || 0,
+          problems: []
+        }));
+        setCompaniesList(formattedCompanies);
+      }
+      setLoadingCompanies(false);
+    };
+    loadCompanies();
+  }, []);
+
+  // Load company questions whenever selectedCompanyId changes
+  useEffect(() => {
+    const loadQuestionsForCompany = async () => {
+      setLoadingQuestions(true);
+      setError(null);
+      const res = await fetchCompanyQuestions(selectedCompanyId, { limit: 100 });
+
+      if (res.success && res.questions) {
+        const formattedProblems = res.questions.map((q) => ({
+          id: q.customId || q._id,
+          title: q.title,
+          topic: q.topic || "DSA",
+          difficulty: q.difficulty || "Medium",
+          frequency: q.frequency || "High Frequency",
+          leetcodeUrl: q.externalLinks?.leetcode || "",
+          gfgUrl: q.externalLinks?.gfg || "",
+          statement: q.statement || "",
+          approach: q.approach || "",
+          complexity: q.complexity || { time: "", space: "" },
+          code: q.code || { cpp: "", python: "" }
+        }));
+        setCompanyQuestions(formattedProblems);
+      } else if (!res.success) {
+        setError(res.error || `Failed to fetch questions for ${selectedCompanyId}`);
+        setCompanyQuestions([]);
+      }
+      setLoadingQuestions(false);
+    };
+
+    if (selectedCompanyId) {
+      loadQuestionsForCompany();
+    }
   }, [selectedCompanyId]);
 
+  const currentCompany = useMemo(() => {
+    return (
+      companiesList.find((c) => c.id === selectedCompanyId) || {
+        id: selectedCompanyId,
+        name: selectedCompanyId.charAt(0).toUpperCase() + selectedCompanyId.slice(1),
+        tier: "Targeted Recruiters",
+        description: "High frequency DSA problems.",
+        totalQuestions: companyQuestions.length,
+        problems: companyQuestions
+      }
+    );
+  }, [companiesList, selectedCompanyId, companyQuestions]);
+
   const filteredProblems = useMemo(() => {
-    return currentCompany.problems.filter((prob) => {
+    return companyQuestions.filter((prob) => {
       const matchesSearch =
         !searchQuery.trim() ||
         prob.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -38,7 +109,7 @@ const CompanySheetsPage = () => {
         difficultyFilter === "All" || prob.difficulty === difficultyFilter;
       return matchesSearch && matchesDifficulty;
     });
-  }, [currentCompany, searchQuery, difficultyFilter]);
+  }, [companyQuestions, searchQuery, difficultyFilter]);
 
   const copyToClipboard = (codeText) => {
     navigator.clipboard.writeText(codeText);
@@ -82,7 +153,7 @@ const CompanySheetsPage = () => {
 
       {/* Company Selector Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-8">
-        {COMPANY_DSA_LIST.map((comp) => {
+        {companiesList.map((comp) => {
           const isSelected = selectedCompanyId === comp.id;
           return (
             <button
@@ -107,7 +178,7 @@ const CompanySheetsPage = () => {
               </div>
 
               <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span>{comp.problems.length} Questions</span>
+                <span>{comp.totalQuestions || "Curated"} Questions</span>
                 <FaFire className="text-amber-500 h-3 w-3" />
               </div>
             </button>
@@ -129,7 +200,7 @@ const CompanySheetsPage = () => {
           </div>
 
           <div className="flex items-center space-x-2 text-xs font-medium text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200 shrink-0">
-            <span>Total Questions: <strong className="text-slate-800">{currentCompany.problems.length}</strong></span>
+            <span>Total Questions: <strong className="text-slate-800">{companyQuestions.length}</strong></span>
           </div>
         </div>
 
@@ -167,89 +238,107 @@ const CompanySheetsPage = () => {
         </div>
       </div>
 
-      {/* Problems Table / Cards */}
-      <div className="space-y-3">
-        {filteredProblems.length > 0 ? (
-          filteredProblems.map((prob) => {
-            const solved = isSolved(prob.id);
-            return (
-              <div
-                key={prob.id}
-                className={`bg-white rounded-2xl border p-5 transition-all duration-150 shadow-sm hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-                  solved ? "border-emerald-300 bg-emerald-50/10" : "border-slate-200"
-                }`}
-              >
-                <div className="flex items-start space-x-3">
-                  <button
-                    onClick={() => toggleSolved(prob.id)}
-                    className={`mt-1 text-base transition-colors ${
-                      solved ? "text-emerald-600" : "text-slate-300 hover:text-slate-400"
-                    }`}
-                    title={solved ? "Mark as Unsolved" : "Mark as Solved"}
-                  >
-                    <FaCheckCircle />
-                  </button>
+      {/* Loading state for questions */}
+      {loadingQuestions ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm animate-pulse space-y-2">
+              <div className="h-5 bg-slate-200 rounded w-1/3"></div>
+              <div className="h-4 bg-slate-100 rounded w-1/2"></div>
+            </div>
+          ))}
+        </div>
+      ) : error ? (
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-3 shadow-sm my-6">
+          <div className="text-3xl">⚠️</div>
+          <h3 className="text-lg font-bold text-rose-800">Connection Error</h3>
+          <p className="text-sm text-rose-600 max-w-md mx-auto">{error}</p>
+        </div>
+      ) : (
+        /* Problems Table / Cards */
+        <div className="space-y-3">
+          {filteredProblems.length > 0 ? (
+            filteredProblems.map((prob) => {
+              const solved = isSolved(prob.id);
+              return (
+                <div
+                  key={prob.id}
+                  className={`bg-white rounded-2xl border p-5 transition-all duration-150 shadow-sm hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                    solved ? "border-emerald-300 bg-emerald-50/10" : "border-slate-200"
+                  }`}
+                >
+                  <div className="flex items-start space-x-3">
+                    <button
+                      onClick={() => toggleSolved(prob.id)}
+                      className={`mt-1 text-base transition-colors ${
+                        solved ? "text-emerald-600" : "text-slate-300 hover:text-slate-400"
+                      }`}
+                      title={solved ? "Mark as Unsolved" : "Mark as Solved"}
+                    >
+                      <FaCheckCircle />
+                    </button>
 
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <h3 className="text-base font-bold text-slate-900">{prob.title}</h3>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getDifficultyBadge(prob.difficulty)}`}>
-                        {prob.difficulty}
-                      </span>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                        {prob.topic}
-                      </span>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <h3 className="text-base font-bold text-slate-900">{prob.title}</h3>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getDifficultyBadge(prob.difficulty)}`}>
+                          {prob.difficulty}
+                        </span>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          {prob.topic}
+                        </span>
+                      </div>
+
+                      {prob.frequency && <p className="text-xs text-slate-500">{prob.frequency}</p>}
                     </div>
+                  </div>
 
-                    <p className="text-xs text-slate-500">{prob.frequency}</p>
+                  {/* External Action Links */}
+                  <div className="flex items-center space-x-2 shrink-0">
+                    {prob.gfgUrl && (
+                      <a
+                        href={prob.gfgUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center space-x-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors"
+                      >
+                        <span>GFG Link</span>
+                        <FaExternalLinkAlt className="h-2.5 w-2.5" />
+                      </a>
+                    )}
+
+                    {prob.leetcodeUrl && (
+                      <a
+                        href={prob.leetcodeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center space-x-1 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-xs font-semibold hover:bg-amber-100 transition-colors"
+                      >
+                        <span>LeetCode</span>
+                        <FaExternalLinkAlt className="h-2.5 w-2.5" />
+                      </a>
+                    )}
+
+                    <button
+                      onClick={() => setSelectedProblem(prob)}
+                      className="inline-flex items-center space-x-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 shadow-sm transition-all"
+                    >
+                      <FaCode className="h-3 w-3" />
+                      <span>View Solution</span>
+                    </button>
                   </div>
                 </div>
-
-                {/* External Action Links */}
-                <div className="flex items-center space-x-2 shrink-0">
-                  {prob.gfgUrl && (
-                    <a
-                      href={prob.gfgUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center space-x-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors"
-                    >
-                      <span>GFG Link</span>
-                      <FaExternalLinkAlt className="h-2.5 w-2.5" />
-                    </a>
-                  )}
-
-                  {prob.leetcodeUrl && (
-                    <a
-                      href={prob.leetcodeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center space-x-1 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-xs font-semibold hover:bg-amber-100 transition-colors"
-                    >
-                      <span>LeetCode</span>
-                      <FaExternalLinkAlt className="h-2.5 w-2.5" />
-                    </a>
-                  )}
-
-                  <button
-                    onClick={() => setSelectedProblem(prob)}
-                    className="inline-flex items-center space-x-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 shadow-sm transition-all"
-                  >
-                    <FaCode className="h-3 w-3" />
-                    <span>View Solution</span>
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="text-center py-12 bg-white rounded-2xl border border-slate-200">
-            <FaBuilding className="mx-auto h-10 w-10 text-slate-300 mb-3" />
-            <h3 className="text-base font-bold text-slate-800">No matching company questions</h3>
-            <p className="text-xs text-slate-500 mt-1">Try switching difficulty filters or searching another term.</p>
-          </div>
-        )}
-      </div>
+              );
+            })
+          ) : (
+            <div className="text-center py-12 bg-white rounded-2xl border border-slate-200">
+              <FaBuilding className="mx-auto h-10 w-10 text-slate-300 mb-3" />
+              <h3 className="text-base font-bold text-slate-800">No matching company questions</h3>
+              <p className="text-xs text-slate-500 mt-1">Try switching difficulty filters or searching another term.</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Problem Detail Solution Modal */}
       <AnimatePresence>
@@ -305,11 +394,11 @@ const CompanySheetsPage = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                     <span className="text-slate-400 font-semibold block text-[10px] uppercase">Time Complexity</span>
-                    <span className="font-bold text-slate-800 text-xs">{selectedProblem.complexity.time}</span>
+                    <span className="font-bold text-slate-800 text-xs">{selectedProblem.complexity?.time || "O(N)"}</span>
                   </div>
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                     <span className="text-slate-400 font-semibold block text-[10px] uppercase">Space Complexity</span>
-                    <span className="font-bold text-slate-800 text-xs">{selectedProblem.complexity.space}</span>
+                    <span className="font-bold text-slate-800 text-xs">{selectedProblem.complexity?.space || "O(1)"}</span>
                   </div>
                 </div>
 
@@ -345,7 +434,7 @@ const CompanySheetsPage = () => {
                   </div>
 
                   <div className="bg-slate-900 text-slate-100 p-4 rounded-xl font-mono text-xs overflow-x-auto">
-                    <pre className="text-emerald-400 whitespace-pre-wrap">{selectedProblem.code[activeCodeTab]}</pre>
+                    <pre className="text-emerald-400 whitespace-pre-wrap">{selectedProblem.code ? selectedProblem.code[activeCodeTab] : ""}</pre>
                   </div>
                 </div>
               </div>

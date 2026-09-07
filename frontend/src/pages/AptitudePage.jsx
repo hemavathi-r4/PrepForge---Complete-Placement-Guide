@@ -1,5 +1,6 @@
-import React, { useState } from "react";
-import { APTITUDE_CATEGORIES, APTITUDE_QUESTIONS } from "../data/aptitudeQuestions";
+import React, { useState, useEffect, useMemo } from "react";
+import { APTITUDE_CATEGORIES, APTITUDE_QUESTIONS as LOCAL_APTITUDE_QUESTIONS } from "../data/aptitudeQuestions";
+import { fetchQuestions } from "../services/questionService";
 import { useSheetProgress } from "../context/SheetProgressContext";
 import {
   FaCalculator,
@@ -8,7 +9,6 @@ import {
   FaCheckCircle,
   FaTimesCircle,
   FaArrowRight,
-  FaRedo,
   FaLightbulb
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
@@ -24,28 +24,61 @@ const getCategoryIcon = (icon) => {
 };
 
 const AptitudePage = () => {
-  const { solvedAptitudeIds, toggleAptitudeSolved, isAptitudeSolved } = useSheetProgress();
+  const { toggleAptitudeSolved, isAptitudeSolved } = useSheetProgress();
 
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeTopic, setActiveTopic] = useState("all");
+
+  const [aptitudeQuestions, setAptitudeQuestions] = useState(LOCAL_APTITUDE_QUESTIONS);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Practice state
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
+  const loadBackendQuestions = async () => {
+    setLoading(true);
+    setError(null);
+    const res = await fetchQuestions({ category: "APTITUDE", limit: 1000 });
+
+    if (res.success && res.questions && res.questions.length > 0) {
+      const formattedQuestions = res.questions.map((q) => ({
+        id: q.customId || q._id,
+        category: q.aptitudeCategory || "quantitative",
+        topic: q.topic || "General Aptitude",
+        question: q.statement || q.title,
+        options: q.options || [],
+        correctAnswer: typeof q.correctAnswer === "number" ? q.correctAnswer : 0,
+        explanation: q.explanation || "",
+        difficulty: q.difficulty || "Medium"
+      }));
+      setAptitudeQuestions(formattedQuestions);
+    } else if (!res.success) {
+      setError(res.error || "Failed to load aptitude questions from server.");
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadBackendQuestions();
+  }, []);
+
   // Filter questions based on category & topic
-  const filteredQuestions = APTITUDE_QUESTIONS.filter((q) => {
-    const matchCat = activeCategory === "all" || q.category === activeCategory;
-    const matchTopic = activeTopic === "all" || q.topic === activeTopic;
-    return matchCat && matchTopic;
-  });
+  const filteredQuestions = useMemo(() => {
+    return aptitudeQuestions.filter((q) => {
+      const matchCat = activeCategory === "all" || q.category === activeCategory;
+      const matchTopic = activeTopic === "all" || q.topic === activeTopic;
+      return matchCat && matchTopic;
+    });
+  }, [aptitudeQuestions, activeCategory, activeTopic]);
 
   const currentQuestion = filteredQuestions[currentQuestionIndex] || filteredQuestions[0];
 
   // Compute category progress stats
   const getCategoryProgress = (categoryId) => {
-    const catQuestions = APTITUDE_QUESTIONS.filter((q) => q.category === categoryId);
+    const catQuestions = aptitudeQuestions.filter((q) => q.category === categoryId);
     if (catQuestions.length === 0) return 0;
     const solvedCount = catQuestions.filter((q) => isAptitudeSolved(q.id)).length;
     return Math.round((solvedCount / catQuestions.length) * 100);
@@ -58,7 +91,7 @@ const AptitudePage = () => {
   };
 
   const handleSubmitAnswer = () => {
-    if (selectedOption !== null && !isSubmitted) {
+    if (selectedOption !== null && !isSubmitted && currentQuestion) {
       setIsSubmitted(true);
       if (selectedOption === currentQuestion.correctAnswer) {
         if (!isAptitudeSolved(currentQuestion.id)) {
@@ -74,7 +107,7 @@ const AptitudePage = () => {
     if (currentQuestionIndex < filteredQuestions.length - 1) {
       setCurrentQuestionIndex((prev) => prev + 1);
     } else {
-      setCurrentQuestionIndex(0); // Loop back
+      setCurrentQuestionIndex(0);
     }
   };
 
@@ -144,7 +177,7 @@ const AptitudePage = () => {
                   </div>
                 </div>
 
-                <div className="pt-6 mt-6 border-t border-gray-50">
+                <div className="pt-6 mt-6 border-t border-gray-5">
                   <button
                     onClick={() => {
                       setActiveCategory(cat.id);
@@ -211,8 +244,27 @@ const AptitudePage = () => {
             ))}
           </div>
 
-          {/* Practice Question Card */}
-          {filteredQuestions.length > 0 && currentQuestion ? (
+          {/* Loading state */}
+          {loading ? (
+            <div className="p-8 text-center animate-pulse space-y-4">
+              <div className="h-6 bg-slate-200 rounded w-1/3 mx-auto"></div>
+              <div className="h-16 bg-slate-100 rounded w-full"></div>
+              <div className="h-12 bg-slate-100 rounded w-full"></div>
+            </div>
+          ) : error ? (
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-3 shadow-sm">
+              <div className="text-3xl">⚠️</div>
+              <h3 className="text-lg font-bold text-rose-800">Connection Error</h3>
+              <p className="text-sm text-rose-600 max-w-md mx-auto">{error}</p>
+              <button
+                onClick={loadBackendQuestions}
+                className="mt-2 inline-flex items-center px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium text-sm rounded-xl transition-all shadow"
+              >
+                Retry Loading
+              </button>
+            </div>
+          ) : filteredQuestions.length > 0 && currentQuestion ? (
+            /* Practice Question Card */
             <div className="space-y-6">
               
               {/* Question Header Status */}

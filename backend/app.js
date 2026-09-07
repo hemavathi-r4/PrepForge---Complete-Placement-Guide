@@ -3,6 +3,8 @@ import cors from 'cors';
 import healthRoutes from './routes/healthRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import questionRoutes from './routes/questionRoutes.js';
+import companyRoutes from './routes/companyRoutes.js';
 import notFound from './middleware/notFoundMiddleware.js';
 import errorHandler from './middleware/errorMiddleware.js';
 
@@ -27,6 +29,8 @@ app.use(
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/questions', questionRoutes);
+app.use('/api/companies', companyRoutes);
 
 // Error Handling Middleware
 app.use(notFound);

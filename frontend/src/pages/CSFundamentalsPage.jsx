@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from "react";
-import { CS_FUNDAMENTALS_CATEGORIES } from "../data/csFundamentalsData";
+import React, { useState, useEffect, useMemo } from "react";
+import { CS_FUNDAMENTALS_CATEGORIES as LOCAL_CATEGORIES } from "../data/csFundamentalsData";
+import { fetchQuestions } from "../services/questionService";
 import { 
   FaDatabase, 
   FaNetworkWired, 
@@ -31,18 +32,72 @@ const CSFundamentalsPage = () => {
   const [masteredTopics, setMasteredTopics] = useState({});
   const [copiedSnippetId, setCopiedSnippetId] = useState(null);
 
+  const [categories, setCategories] = useState(LOCAL_CATEGORIES);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const loadBackendQuestions = async () => {
+    setLoading(true);
+    setError(null);
+    const res = await fetchQuestions({ category: "CORE", limit: 1000 });
+
+    if (res.success && res.questions && res.questions.length > 0) {
+      const catMap = new Map();
+
+      LOCAL_CATEGORIES.forEach((c) => {
+        catMap.set(c.id.toLowerCase(), {
+          ...c,
+          topics: []
+        });
+      });
+
+      res.questions.forEach((q) => {
+        const catKey = (q.shortName || q.topic || "DBMS").toLowerCase();
+        let matchedCatId = "dbms";
+        if (catKey.includes("network") || catKey.includes("cn")) matchedCatId = "cn";
+        else if (catKey.includes("oop")) matchedCatId = "oops";
+        else if (catKey.includes("system") || catKey.includes("sd")) matchedCatId = "system-design";
+
+        const formattedTopic = {
+          id: q.customId || q._id,
+          title: q.title,
+          summary: q.summary || q.statement || "",
+          keyConcepts: q.keyConcepts || [],
+          interviewQAs: q.interviewQAs || [],
+          codeSnippet: q.codeSnippet || "",
+          gfgUrl: q.externalLinks?.gfg || q.gfgHubUrl || ""
+        };
+
+        if (catMap.has(matchedCatId)) {
+          catMap.get(matchedCatId).topics.push(formattedTopic);
+        }
+      });
+
+      const structuredCats = Array.from(catMap.values());
+      setCategories(structuredCats);
+    } else if (!res.success) {
+      setError(res.error || "Failed to load core subject questions from server.");
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadBackendQuestions();
+  }, []);
+
   const currentCategoryObj = useMemo(() => {
-    return CS_FUNDAMENTALS_CATEGORIES.find((cat) => cat.id === activeCategory) || CS_FUNDAMENTALS_CATEGORIES[0];
-  }, [activeCategory]);
+    return categories.find((cat) => cat.id === activeCategory) || categories[0];
+  }, [categories, activeCategory]);
 
   const filteredTopics = useMemo(() => {
+    if (!currentCategoryObj?.topics) return [];
     if (!searchQuery.trim()) return currentCategoryObj.topics;
     const query = searchQuery.toLowerCase();
     return currentCategoryObj.topics.filter(
       (topic) =>
         topic.title.toLowerCase().includes(query) ||
         topic.summary.toLowerCase().includes(query) ||
-        topic.keyConcepts.some((c) => c.toLowerCase().includes(query))
+        (topic.keyConcepts && topic.keyConcepts.some((c) => c.toLowerCase().includes(query)))
     );
   }, [currentCategoryObj, searchQuery]);
 
@@ -78,23 +133,25 @@ const CSFundamentalsPage = () => {
             Ace technical interviews with concise concept breakdowns, GeeksforGeeks deep-dive references, key interview Q&As, and architecture snippets across DBMS, Networks, OOPs, and System Design.
           </p>
 
-          <div className="flex flex-wrap gap-4 pt-2">
-            <a
-              href={currentCategoryObj.gfgHubUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-md transition-all duration-200"
-            >
-              <span>Explore {currentCategoryObj.shortName} on GeeksforGeeks</span>
-              <FaExternalLinkAlt className="h-3.5 w-3.5" />
-            </a>
-          </div>
+          {currentCategoryObj && (
+            <div className="flex flex-wrap gap-4 pt-2">
+              <a
+                href={currentCategoryObj.gfgHubUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-md transition-all duration-200"
+              >
+                <span>Explore {currentCategoryObj.shortName} on GeeksforGeeks</span>
+                <FaExternalLinkAlt className="h-3.5 w-3.5" />
+              </a>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Category Tabs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        {CS_FUNDAMENTALS_CATEGORIES.map((cat) => {
+        {categories.map((cat) => {
           const isActive = activeCategory === cat.id;
           return (
             <button
@@ -114,7 +171,7 @@ const CSFundamentalsPage = () => {
               </div>
               <div>
                 <h3 className="text-sm font-bold tracking-tight">{cat.shortName}</h3>
-                <p className="text-xs text-slate-400 font-medium">{cat.topics.length} Core Topics</p>
+                <p className="text-xs text-slate-400 font-medium">{cat.topics?.length || 0} Core Topics</p>
               </div>
             </button>
           );
@@ -130,134 +187,166 @@ const CSFundamentalsPage = () => {
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={`Search ${currentCategoryObj.shortName} topics, concepts, or keywords...`}
+          placeholder={`Search ${currentCategoryObj?.shortName || 'core'} topics, concepts, or keywords...`}
           className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
         />
       </div>
 
-      {/* Topic Cards List */}
-      <div className="space-y-6">
-        {filteredTopics.length > 0 ? (
-          filteredTopics.map((topic) => {
-            const isTopicMastered = masteredTopics[topic.id];
-            const isExpanded = expandedTopic === topic.id;
+      {/* Loading State */}
+      {loading ? (
+        <div className="space-y-4">
+          {[1, 2, 3].map((n) => (
+            <div
+              key={n}
+              className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm animate-pulse space-y-3"
+            >
+              <div className="h-6 bg-slate-200 rounded w-1/3"></div>
+              <div className="h-4 bg-slate-100 rounded w-2/3"></div>
+              <div className="h-10 bg-slate-100 rounded w-full"></div>
+            </div>
+          ))}
+        </div>
+      ) : error ? (
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-3 shadow-sm my-6">
+          <div className="text-3xl">⚠️</div>
+          <h3 className="text-lg font-bold text-rose-800">Connection Error</h3>
+          <p className="text-sm text-rose-600 max-w-md mx-auto">{error}</p>
+          <button
+            onClick={loadBackendQuestions}
+            className="mt-2 inline-flex items-center px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium text-sm rounded-xl transition-all shadow"
+          >
+            Retry Loading
+          </button>
+        </div>
+      ) : (
+        /* Topic Cards List */
+        <div className="space-y-6">
+          {filteredTopics.length > 0 ? (
+            filteredTopics.map((topic) => {
+              const isTopicMastered = masteredTopics[topic.id];
+              const isExpanded = expandedTopic === topic.id;
 
-            return (
-              <motion.div
-                key={topic.id}
-                layout
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md ${
-                  isTopicMastered ? "border-emerald-300 bg-emerald-50/20" : "border-slate-200"
-                }`}
-              >
-                <div className="p-6">
-                  {/* Topic Top Row */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3">
-                    <div className="flex items-start space-x-3">
-                      <button
-                        onClick={() => toggleMastered(topic.id)}
-                        className={`mt-0.5 text-lg transition-colors ${
-                          isTopicMastered ? "text-emerald-600" : "text-slate-300 hover:text-slate-400"
-                        }`}
-                        title={isTopicMastered ? "Mark as Unmastered" : "Mark as Mastered"}
-                      >
-                        <FaCheckCircle />
-                      </button>
-                      <div>
-                        <h2 className="text-xl font-bold text-slate-900">{topic.title}</h2>
-                        <p className="text-slate-600 text-sm mt-1">{topic.summary}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2 shrink-0">
-                      <a
-                        href={topic.gfgUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors"
-                      >
-                        <span>GFG Article</span>
-                        <FaExternalLinkAlt className="h-3 w-3" />
-                      </a>
-                    </div>
-                  </div>
-
-                  {/* Key Concepts Badges */}
-                  <div className="mt-4 pt-4 border-t border-slate-100">
-                    <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-                      Key Takeaways & Concept Rules
-                    </h4>
-                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {topic.keyConcepts.map((concept, idx) => (
-                        <li key={idx} className="flex items-start space-x-2 text-xs text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-150">
-                          <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
-                          <span>{concept}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Code / Architecture Snippet Box */}
-                  {topic.codeSnippet && (
-                    <div className="mt-4 bg-slate-900 text-slate-200 rounded-xl p-4 text-xs font-mono relative overflow-x-auto">
-                      <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-800 text-slate-400 font-sans text-xs">
-                        <span>Code / Architecture Illustration</span>
+              return (
+                <motion.div
+                  key={topic.id}
+                  layout
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md ${
+                    isTopicMastered ? "border-emerald-300 bg-emerald-50/20" : "border-slate-200"
+                  }`}
+                >
+                  <div className="p-6">
+                    {/* Topic Top Row */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3">
+                      <div className="flex items-start space-x-3">
                         <button
-                          onClick={() => copyCode(topic.codeSnippet, topic.id)}
-                          className="flex items-center space-x-1 hover:text-white transition-colors"
+                          onClick={() => toggleMastered(topic.id)}
+                          className={`mt-0.5 text-lg transition-colors ${
+                            isTopicMastered ? "text-emerald-600" : "text-slate-300 hover:text-slate-400"
+                          }`}
+                          title={isTopicMastered ? "Mark as Unmastered" : "Mark as Mastered"}
                         >
-                          <FaCopy className="h-3 w-3" />
-                          <span>{copiedSnippetId === topic.id ? "Copied!" : "Copy"}</span>
+                          <FaCheckCircle />
                         </button>
+                        <div>
+                          <h2 className="text-xl font-bold text-slate-900">{topic.title}</h2>
+                          <p className="text-slate-600 text-sm mt-1">{topic.summary}</p>
+                        </div>
                       </div>
-                      <pre className="text-emerald-400 font-mono text-xs whitespace-pre-wrap">{topic.codeSnippet}</pre>
-                    </div>
-                  )}
 
-                  {/* Interview Q&As Toggle */}
-                  {topic.interviewQAs && topic.interviewQAs.length > 0 && (
-                    <div className="mt-4">
-                      <button
-                        onClick={() => setExpandedTopic(isExpanded ? null : topic.id)}
-                        className="inline-flex items-center space-x-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
-                      >
-                        <FaQuestionCircle className="h-3.5 w-3.5" />
-                        <span>{isExpanded ? "Hide Interview Q&As" : `View Top Interview Q&As (${topic.interviewQAs.length})`}</span>
-                      </button>
-
-                      <AnimatePresence>
-                        {isExpanded && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="mt-3 space-y-3 pt-3 border-t border-slate-100"
+                      <div className="flex items-center space-x-2 shrink-0">
+                        {topic.gfgUrl && (
+                          <a
+                            href={topic.gfgUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors"
                           >
-                            {topic.interviewQAs.map((qa, qIdx) => (
-                              <div key={qIdx} className="bg-indigo-50/50 border border-indigo-100 p-3.5 rounded-xl text-xs space-y-1.5">
-                                <p className="font-bold text-indigo-900">Q: {qa.q}</p>
-                                <p className="text-slate-700 leading-relaxed">A: {qa.a}</p>
-                              </div>
-                            ))}
-                          </motion.div>
+                            <span>GFG Article</span>
+                            <FaExternalLinkAlt className="h-3 w-3" />
+                          </a>
                         )}
-                      </AnimatePresence>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </motion.div>
-            );
-          })
-        ) : (
-          <div className="text-center py-12 bg-white rounded-2xl border border-slate-200">
-            <FaBookOpen className="mx-auto h-10 w-10 text-slate-300 mb-3" />
-            <h3 className="text-base font-bold text-slate-800">No matching topics found</h3>
-            <p className="text-xs text-slate-500 mt-1">Try adjusting your search query or select another CS category above.</p>
-          </div>
-        )}
-      </div>
+
+                    {/* Key Concepts Badges */}
+                    {topic.keyConcepts && topic.keyConcepts.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-slate-100">
+                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+                          Key Takeaways & Concept Rules
+                        </h4>
+                        <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {topic.keyConcepts.map((concept, idx) => (
+                            <li key={idx} className="flex items-start space-x-2 text-xs text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-150">
+                              <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
+                              <span>{concept}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Code / Architecture Snippet Box */}
+                    {topic.codeSnippet && (
+                      <div className="mt-4 bg-slate-900 text-slate-200 rounded-xl p-4 text-xs font-mono relative overflow-x-auto">
+                        <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-800 text-slate-400 font-sans text-xs">
+                          <span>Code / Architecture Illustration</span>
+                          <button
+                            onClick={() => copyCode(topic.codeSnippet, topic.id)}
+                            className="flex items-center space-x-1 hover:text-white transition-colors"
+                          >
+                            <FaCopy className="h-3 w-3" />
+                            <span>{copiedSnippetId === topic.id ? "Copied!" : "Copy"}</span>
+                          </button>
+                        </div>
+                        <pre className="text-emerald-400 font-mono text-xs whitespace-pre-wrap">{topic.codeSnippet}</pre>
+                      </div>
+                    )}
+
+                    {/* Interview Q&As Toggle */}
+                    {topic.interviewQAs && topic.interviewQAs.length > 0 && (
+                      <div className="mt-4">
+                        <button
+                          onClick={() => setExpandedTopic(isExpanded ? null : topic.id)}
+                          className="inline-flex items-center space-x-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+                        >
+                          <FaQuestionCircle className="h-3.5 w-3.5" />
+                          <span>{isExpanded ? "Hide Interview Q&As" : `View Top Interview Q&As (${topic.interviewQAs.length})`}</span>
+                        </button>
+
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "auto" }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="mt-3 space-y-3 pt-3 border-t border-slate-100"
+                            >
+                              {topic.interviewQAs.map((qa, qIdx) => (
+                                <div key={qIdx} className="bg-indigo-50/50 border border-indigo-100 p-3.5 rounded-xl text-xs space-y-1.5">
+                                  <p className="font-bold text-indigo-900">Q: {qa.q}</p>
+                                  <p className="text-slate-700 leading-relaxed">A: {qa.a}</p>
+                                </div>
+                              ))}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })
+          ) : (
+            <div className="text-center py-12 bg-white rounded-2xl border border-slate-200">
+              <FaBookOpen className="mx-auto h-10 w-10 text-slate-300 mb-3" />
+              <h3 className="text-base font-bold text-slate-800">No matching topics found</h3>
+              <p className="text-xs text-slate-500 mt-1">Try adjusting your search query or select another CS category above.</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

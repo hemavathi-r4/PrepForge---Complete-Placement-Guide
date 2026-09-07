@@ -625,3 +625,123 @@ The pre-save hook checks `if (!this.isModified('password')) return next();`. Whe
 7. **Frontend Verification**:
    - Navigate to `/profile`, edit bio and handles -> verify UI updates immediately.
    - Navigate to `/settings`, change password -> verify success message.
+
+---
+
+# Backend Stage 4: Learning Content & Question APIs
+
+## Overview & Architecture Goals
+
+Stage 4 transitions PrepForge's learning content (DSA Questions, SQL Challenges, Aptitude Problems, CS Fundamentals Core Subjects, and Company-Wise DSA Sheets) from static frontend JSON files into MongoDB collections.
+
+The learning endpoints are exposed as **Public REST APIs** that support search, multi-parameter filtering, and pagination.
+
+---
+
+## Technical Specifications & Models
+
+### 1. Models Created
+
+#### `Company` Model (`backend/models/Company.js`)
+- `slug`: String (unique, lowercase, indexed, e.g. `"google"`, `"amazon"`)
+- `name`: String (e.g. `"Google"`, `"Amazon"`)
+- `tier`: String (e.g. `"MAANG / FAANG"`)
+- `description`: String
+- `totalQuestions`: Number
+- `difficultyBreakdown`: `{ easy, medium, hard }`
+
+#### `Question` Model (`backend/models/Question.js`)
+- `customId`: String (unique, indexed, e.g. `"dsa-arr-1"`, `"sql-b-1"`)
+- `title`: String (indexed for text search)
+- `topic`: String (indexed)
+- `category`: Enum `["DSA", "SQL", "APTITUDE", "CORE"]` (indexed)
+- `difficulty`: Enum `["Easy", "Medium", "Hard"]` (indexed)
+- `statement`: String
+- `approach`: String
+- `complexity`: `{ time, space }`
+- `code`: `{ cpp, python }`
+- `externalLinks`: `{ leetcode, gfg }`
+- `companies`: Array of `ObjectId` refs to `Company`
+- `companySlugs`: Array of Strings (indexed)
+- `tags`: Array of Strings
+- SQL Specific: `schemaText`, `solutionQuery`, `explanation`, `keyConcept`
+- Aptitude Specific: `aptitudeCategory`, `options`, `correctAnswer`, `explanation`
+- CORE Specific: `shortName`, `summary`, `keyConcepts`, `interviewQAs`, `codeSnippet`, `gfgHubUrl`
+- Company Specific: `frequency`
+
+---
+
+## Services & Controllers Created
+
+### 1. Question Layer
+- **`services/questionService.js`**: `getQuestionsService(queryParams)` and `getQuestionByIdService(id)`.
+  - Supports query filters: `category`, `topic`, `difficulty`, `search`, `company`, `page`, `limit`.
+  - Performs case-insensitive search across `title`, `topic`, `tags`, and `statement`.
+- **`controllers/questionController.js`**: `getQuestions` (`GET /api/questions`) and `getQuestionById` (`GET /api/questions/:id`).
+- **`routes/questionRoutes.js`**: Mounted at `/api/questions`.
+
+### 2. Company Layer
+- **`services/companyService.js`**: `getAllCompaniesService()`, `getCompanyByIdService(companyId)`, and `getCompanyQuestionsService(companyId, queryParams)`.
+- **`controllers/companyController.js`**: `getCompanies` (`GET /api/companies`), `getCompanyById` (`GET /api/companies/:companyId`), and `getCompanyQuestions` (`GET /api/companies/:companyId/questions`).
+- **`routes/companyRoutes.js`**: Mounted at `/api/companies`.
+
+---
+
+## Seeding Mechanism (`backend/scripts/seed.js`)
+
+- Command: `node scripts/seed.js` (or `npm run seed`)
+- **Safety Rule Enforced**: Clears ONLY `Question` and `Company` collections. `User` collection and authentication data remain completely untouched.
+- Migrates static frontend datasets from `frontend/src/data/`:
+  - `dsaSheetData.js`
+  - `sqlSheetData.js`
+  - `aptitudeQuestions.js`
+  - `csFundamentalsData.js`
+  - `companyDsaData.js`
+
+### Migration Metrics
+- **Companies Migrated**: 5 (`google`, `amazon`, `microsoft`, `tcs`, `infosys`)
+- **Questions Migrated**: 125 total
+  - `DSA`: 68
+  - `SQL`: 34
+  - `CORE`: 13
+  - `APTITUDE`: 10
+
+---
+
+## API Endpoints Reference
+
+| Endpoint | Method | Public / Auth | Query Parameters | Description |
+|---|---|---|---|---|
+| `/api/questions` | GET | Public | `category`, `topic`, `difficulty`, `search`, `company`, `page`, `limit` | Paginated question search & filtering |
+| `/api/questions/:id` | GET | Public | None | Question details by `_id` or `customId` |
+| `/api/companies` | GET | Public | None | List of all tagged recruiters/companies |
+| `/api/companies/:companyId` | GET | Public | None | Company details by `_id` or `slug` |
+| `/api/companies/:companyId/questions` | GET | Public | `topic`, `difficulty`, `search`, `page`, `limit` | Questions tagged for specific company |
+
+---
+
+## Frontend Files Integration
+
+| Frontend Service / Page | File Location | Responsibilities |
+|---|---|---|
+| **Question Service** | `frontend/src/services/questionService.js` | Client API wrapper for `fetchQuestions` and `fetchQuestionById` using `VITE_API_URL` |
+| **Company Service** | `frontend/src/services/companyService.js` | Client API wrapper for `fetchCompanies`, `fetchCompanyById`, and `fetchCompanyQuestions` |
+| **DSA Sheet Page** | `frontend/src/pages/DSASheetPage.jsx` | Consumes `/api/questions?category=DSA`, groups by topic accordion, handles search & filters |
+| **SQL Sheet Page** | `frontend/src/pages/SQLSheetPage.jsx` | Consumes `/api/questions?category=SQL`, renders SQL schema & queries |
+| **Aptitude Page** | `frontend/src/pages/AptitudePage.jsx` | Consumes `/api/questions?category=APTITUDE`, provides MCQ practice workflow |
+| **CS Fundamentals Page** | `frontend/src/pages/CSFundamentalsPage.jsx` | Consumes `/api/questions?category=CORE`, groups by CS domain |
+| **Company Sheets Page** | `frontend/src/pages/CompanySheetsPage.jsx` | Consumes `/api/companies` and `/api/companies/:companyId/questions` |
+
+---
+
+## How to Run Seed & Test APIs
+
+1. **Seed Learning Data**:
+   ```bash
+   node scripts/seed.js
+   ```
+2. **Run Backend API Verification Suite**:
+   ```bash
+   node scratch/test_stage4_api.js
+   ```
+
