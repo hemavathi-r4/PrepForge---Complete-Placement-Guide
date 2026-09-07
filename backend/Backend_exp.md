@@ -745,3 +745,274 @@ The learning endpoints are exposed as **Public REST APIs** that support search, 
    node scratch/test_stage4_api.js
    ```
 
+
+---
+
+# Backend Stage 5: User Progress Sync & Analytics
+
+## Overview & Goals
+
+Stage 5 completes the transition from **localStorage-only progress tracking** to a fully **MongoDB-backed, per-user progress persistence** system. Authenticated users' progress (which questions they have solved) is now stored in MongoDB and synced in real-time between devices. The Dashboard displays live analytics: overall completion %, category-wise breakdowns, current streak, and longest streak — all computed dynamically from the database.
+
+---
+
+## Architectural Separation of Concerns (Stage 5)
+
+$$\text{HTTP Request} \longrightarrow \text{Route} \longrightarrow \text{Auth Middleware} \longrightarrow \text{Controller} \longrightarrow \text{Service} \longrightarrow \text{Model} \longrightarrow \text{MongoDB}$$
+
+```
+backend/
+├── models/
+│   ├── UserProgress.js       # [STAGE 5] Per-question solved/unsolved record per user
+│   └── UserActivity.js       # [STAGE 5] Daily activity log (questions solved per UTC date)
+├── services/
+│   └── progressService.js    # [STAGE 5] Business logic: mark solved, summary, streak, activity
+├── controllers/
+│   └── progressController.js # [STAGE 5] HTTP handler layer for /api/progress
+└── routes/
+    └── progressRoutes.js     # [STAGE 5] Route definitions, mounted at /api/progress
+```
+
+---
+
+## Data Models (Stage 5)
+
+### 1. `UserProgress` Model (`models/UserProgress.js`)
+
+Stores one document per (user, question) pair. Tracks solved status and timestamp.
+
+```javascript
+const userProgressSchema = new mongoose.Schema({
+  user:     { type: ObjectId, ref: 'User',     required: true, index: true },
+  question: { type: ObjectId, ref: 'Question', required: true, index: true },
+  customId: { type: String,   required: true,  trim: true,     index: true },
+  solved:   { type: Boolean,  required: true,  default: false },
+  solvedAt: { type: Date,     default: null }
+}, { timestamps: true });
+
+// Compound unique: one record per user per question
+userProgressSchema.index({ user: 1, question: 1 }, { unique: true });
+userProgressSchema.index({ user: 1, customId: 1 });
+userProgressSchema.index({ user: 1, solved: 1 });
+```
+
+**Key design decisions:**
+- `customId` is denormalized for fast lookup by frontend question ID strings without always joining `Question`.
+- `findOneAndUpdate` with `{ upsert: true }` guarantees **atomic idempotent** mark-solved operations.
+- The compound unique index on `{ user, question }` prevents duplicate progress records.
+
+---
+
+### 2. `UserActivity` Model (`models/UserActivity.js`)
+
+Stores one document per (user, UTC date) pair for streak calculation.
+
+```javascript
+const userActivitySchema = new mongoose.Schema({
+  user:            { type: ObjectId, ref: 'User', required: true, index: true },
+  date:            { type: String,   required: true, trim: true },  // "YYYY-MM-DD" UTC
+  questionsSolved: { type: Number,   default: 0,    min: 0 }
+}, { timestamps: true });
+
+// One activity record per user per day
+userActivitySchema.index({ user: 1, date: 1 }, { unique: true });
+```
+
+**Key design decisions:**
+- `date` is stored as a `"YYYY-MM-DD"` string (UTC) to completely avoid timezone boundary bugs.
+- `$inc: { questionsSolved: 1 }` with `upsert: true` creates the day's record atomically on the first solve.
+- Only increments when a question transitions from **unsolved → solved** (no double-counting).
+
+---
+
+## Business Logic Layer (`services/progressService.js`)
+
+### `markQuestionSolvedService(userId, questionId, solved)`
+
+1. Resolves `questionId` — accepts both MongoDB `_id` and `customId` string.
+2. Checks if the question was already solved (to avoid double-counting activity).
+3. **Upserts** `UserProgress` atomically.
+4. If newly becoming solved, increments today's `UserActivity` via `$inc`.
+
+### `getProgressSummaryService(userId)`
+
+Runs two **parallel MongoDB aggregations**:
+1. `Question.aggregate` → total question count per category.
+2. `UserProgress.aggregate` with `$lookup` → solved count per category for this user.
+
+Returns: `{ totalSolved, totalQuestions, overallPercentage, dsaSolved, sqlSolved, aptitudeSolved, coreSolved, categoryBreakdown }`.
+
+### `getStreakService(userId)`
+
+Computes streak by building a `Set` of active UTC date strings, then walking backward from today:
+- **Current streak**: Consecutive days ending today.
+- **Longest streak**: Maximum consecutive run across all active dates.
+
+Returns: `{ current: number, longest: number, todayActive: boolean }`.
+
+---
+
+## API Endpoints Specification (Stage 5)
+
+All endpoints require `Authorization: Bearer <token>` header.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/progress` | GET | Full progress list (all questions, solved + unsolved) |
+| `/api/progress/:questionId` | PUT | Mark question solved/unsolved |
+| `/api/progress/:questionId` | GET | Progress status for a single question |
+| `/api/progress/summary` | GET | Overall + category-wise progress summary |
+| `/api/progress/streak` | GET | Current streak, longest streak, today active |
+| `/api/progress/activity` | GET | Recent daily activity log (`?days=30`) |
+
+### PUT `/api/progress/:questionId`
+
+**Request Body:** `{ "solved": true }`
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Question marked as solved",
+  "progress": {
+    "questionId": "dsa-arr-1",
+    "solved": true,
+    "solvedAt": "2026-09-07T10:15:00.000Z"
+  }
+}
+```
+
+**Validation errors:**
+- `"solved"` must be a boolean → HTTP 400
+- Invalid `questionId` → HTTP 404
+
+### GET `/api/progress/summary`
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "summary": {
+    "totalSolved": 12,
+    "totalQuestions": 125,
+    "overallPercentage": 10,
+    "categoryBreakdown": {
+      "dsa":      { "solved": 8,  "total": 68, "percentage": 12 },
+      "sql":      { "solved": 3,  "total": 34, "percentage": 9  },
+      "aptitude": { "solved": 1,  "total": 10, "percentage": 10 },
+      "core":     { "solved": 0,  "total": 13, "percentage": 0  }
+    }
+  }
+}
+```
+
+---
+
+## Route Configuration (`routes/progressRoutes.js`)
+
+```javascript
+router.use(protect);  // All routes require JWT
+
+// Named routes MUST come before :questionId to avoid conflicts
+router.get('/summary',  getProgressSummary);
+router.get('/streak',   getStreak);
+router.get('/activity', getActivity);
+
+router.get('/',              getUserProgress);
+router.put('/:questionId',   updateQuestionProgress);
+router.get('/:questionId',   getQuestionProgress);
+```
+
+> **Critical**: `/summary`, `/streak`, `/activity` must be declared **before** `/:questionId`. Otherwise Express interprets the literal strings as a `questionId` parameter value.
+
+---
+
+## Frontend Integration (Stage 5)
+
+### Files Modified/Created
+
+| File | Change | Responsibility |
+|---|---|---|
+| `frontend/src/services/progressService.js` | **[NEW]** | REST client for all `/api/progress` endpoints |
+| `frontend/src/context/SheetProgressContext.jsx` | **[MODIFIED]** | Backend sync on mount + on toggleSolved |
+| `frontend/src/pages/DashboardPage.jsx` | **[MODIFIED]** | Live stats from backend (summary, streak) |
+| `frontend/src/data/mockQuestions.js` | **[MODIFIED]** | Added `category` field to PREP_MODULES |
+
+### `SheetProgressContext.jsx` — Stage 5 Upgrade
+
+**On Mount** (`syncProgressFromBackend`):
+- Calls `GET /api/progress`.
+- Merges solved `customId`s into `solvedIds` (union — no data lost).
+- Safely no-ops when unauthenticated.
+
+**On `toggleSolved(id)`**:
+1. Immediately updates `solvedIds` state and `localStorage` (**optimistic update**).
+2. If authenticated, fires a background `PUT /api/progress/:id` (fire-and-forget).
+3. Backend failure is non-fatal: local state stays correct.
+
+**Unauthenticated users**: localStorage remains sole source of truth (zero behavior change from Stage 4).
+
+### `DashboardPage.jsx` — Stage 5 Upgrade
+
+Fetches `getProgressSummary()` and `getStreak()` in parallel on mount. Shows skeleton shimmer while loading, then renders:
+- Live **Problems Solved** count and **overall %**
+- Live **Current Streak** badge
+- **Category Breakdown** section with animated progress bars
+- **Module cards** enriched with live `%` from `categoryBreakdown`
+
+---
+
+## Security Architecture (Stage 5)
+
+1. **User isolation via JWT**: All queries filter by `req.user._id` from the verified JWT. Cross-user progress access is architecturally impossible.
+2. **No userId in URL**: User identity comes exclusively from the verified JWT token — no BOLA/IDOR risk.
+3. **Atomic upsert**: `findOneAndUpdate` with `upsert: true` prevents race condition duplicates.
+4. **UTC-normalized dates**: Streak calculations use UTC midnight strings to avoid server/client timezone mismatches.
+
+---
+
+## Interview Preparation & QA Guide (Stage 5)
+
+### Q1: Why store `customId` redundantly in `UserProgress` when there is already a `question` ObjectId reference?
+**Answer:**
+This is deliberate **denormalization** for performance. Frontend questions are identified by `customId` strings (e.g. `"dsa-arr-1"`). Without `customId`, every string-based lookup requires two queries: find `Question` by `customId`, then find `UserProgress`. By storing `customId` directly with a compound index `{ user, customId }`, we achieve single-query O(log n) lookups.
+
+### Q2: What happens if a user marks the same question solved twice? Does the activity counter double-increment?
+**Answer:**
+No. The service records `wasAlreadySolved` before the upsert, and only calls `$inc` on `UserActivity` when a question transitions from **unsolved → solved**, not on subsequent re-marking. The upsert itself is idempotent by the unique compound index.
+
+### Q3: Why use a UTC date string (`"YYYY-MM-DD"`) instead of a Date object for activity records?
+**Answer:**
+MongoDB `Date` objects require timezone-aware aggregation (`$dateToString` with `timezone` parameter). A fixed UTC string makes streak comparison completely unambiguous, portable across servers in any timezone, and trivially comparable with JavaScript `===`.
+
+### Q4: What is optimistic updating, and why is it used in `SheetProgressContext`?
+**Answer:**
+Optimistic updating means updating local UI state immediately before receiving server confirmation, eliminating perceived network latency. If the backend call fails, the local state is not rolled back — next mount will reconcile from MongoDB. This provides a smooth UX without blocking interactions on network latency.
+
+### Q5: How does `getStreakService` handle a user who missed yesterday but solved today?
+**Answer:**
+The backward-walking cursor starts from today. If today has activity, `currentStreak` starts at 1 and walks back to yesterday, the day before, etc. If yesterday had no activity, the walk stops immediately. The streak resets to 0 for days with no activity, matching the conventional definition: a streak requires at least one solve on each consecutive day including today.
+
+---
+
+## Stage 5 Verification Checklist
+
+1. **Mark Solved (Backend Persisted)**:
+   - Login, open DSA Sheet, check a problem → Verify `UserProgress` document in MongoDB with `solved: true`.
+2. **Progress Summary**:
+   - `GET /api/progress/summary` with valid JWT → Expect `totalSolved`, `overallPercentage`, all 4 categories.
+3. **Streak**:
+   - Solve at least one question → `GET /api/progress/streak` → Expect `streak.current >= 1`, `todayActive: true`.
+4. **Dashboard Live Data**:
+   - Navigate to `/dashboard` → Stats row shows real `totalSolved`.
+   - Category Breakdown section visible with correct percentages.
+5. **Backend Test Suite**:
+   ```bash
+   node scratch/test_stage5_api.js
+   ```
+   Expect: `12 passed, 0 failed`.
+6. **Unauthenticated Fallback**:
+   - Logout, open DSA Sheet → Progress tracked in localStorage only.
+   - Protected routes return HTTP 401.
+7. **Cross-Device Sync**:
+   - Mark questions solved on device A. Login on device B → Progress synced from backend on mount.

@@ -1,12 +1,13 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useSheetProgress } from "../context/SheetProgressContext";
+import { getProgressSummary, getStreak } from "../services/progressService";
 import { PREP_MODULES, MOCK_TESTS } from "../data/mockQuestions";
 import {
   FaCode, FaChartLine, FaNetworkWired, FaDatabase,
   FaUsers, FaFileAlt, FaArrowRight, FaClock, FaLock,
-  FaCalculator, FaRobot
+  FaCalculator, FaRobot, FaFire
 } from "react-icons/fa";
 import { HiSparkles } from "react-icons/hi2";
 import { motion } from "framer-motion";
@@ -35,12 +36,89 @@ const statusColor = (status) => {
   }
 };
 
+/** Small skeleton shimmer used while backend data is loading */
+const StatSkeleton = () => (
+  <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm animate-pulse">
+    <div className="flex items-center justify-between">
+      <div className="h-3 bg-slate-200 rounded w-24" />
+      <div className="h-6 w-6 bg-slate-200 rounded-full" />
+    </div>
+    <div className="mt-3 h-8 bg-slate-200 rounded w-16" />
+    <div className="mt-2 h-3 bg-slate-100 rounded w-20" />
+  </div>
+);
+
 const DashboardPage = () => {
   const { user } = useAuth();
-  const { solvedIds, solvedAptitudeIds, getInterviewStats } = useSheetProgress();
+  const { getInterviewStats } = useSheetProgress();
   const interviewStats = getInterviewStats();
 
-  const totalProblemsSolved = (solvedIds?.length || 0) + (solvedAptitudeIds?.length || 0);
+  // ── Stage 5: Backend progress data ──────────────────────────
+  const [progressSummary, setProgressSummary] = useState(null);
+  const [streakData, setStreakData] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadBackendStats = async () => {
+      const token = localStorage.getItem("prepforge_token");
+      if (!token) {
+        // Not authenticated: skip backend fetch, show zeros
+        setStatsLoading(false);
+        return;
+      }
+
+      setStatsLoading(true);
+      try {
+        const [summaryRes, streakRes] = await Promise.all([
+          getProgressSummary(),
+          getStreak()
+        ]);
+
+        if (isMounted) {
+          if (summaryRes.success) setProgressSummary(summaryRes.summary);
+          if (streakRes.success) setStreakData(streakRes.streak);
+        }
+      } catch (err) {
+        console.error("Dashboard: failed to load backend stats", err);
+      } finally {
+        if (isMounted) setStatsLoading(false);
+      }
+    };
+
+    loadBackendStats();
+    return () => { isMounted = false; };
+  }, []);
+
+  // ── Derived display values ───────────────────────────────────
+  const totalProblemsSolved = progressSummary
+    ? progressSummary.totalSolved
+    : 0;
+
+  const overallPercentage = progressSummary
+    ? progressSummary.overallPercentage
+    : 0;
+
+  const currentStreak = streakData ? streakData.current : 0;
+  const longestStreak = streakData ? streakData.longest : 0;
+
+  // Category breakdown for module progress bars (live from backend)
+  const categoryMap = progressSummary?.categoryBreakdown || {};
+
+  // Enrich PREP_MODULES with live backend percentages when available
+  const enrichedModules = PREP_MODULES.map((mod) => {
+    const categoryKey = mod.category?.toLowerCase();
+    if (categoryKey && categoryMap[categoryKey]) {
+      return {
+        ...mod,
+        completedPercentage: categoryMap[categoryKey].percentage,
+        solvedCount: categoryMap[categoryKey].solved,
+        totalCount: categoryMap[categoryKey].total
+      };
+    }
+    return mod;
+  });
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -67,11 +145,26 @@ const DashboardPage = () => {
               </p>
             </div>
             <div className="flex items-center space-x-3">
+              {/* Live streak badge from backend */}
               <div className="flex items-center space-x-2 bg-amber-50 border border-amber-100 px-4 py-2 rounded-xl">
-                <span className="text-lg">🔥</span>
+                <FaFire className="text-amber-500 h-4 w-4" />
                 <div>
-                  <p className="text-xs font-semibold text-amber-800">7 Day Streak</p>
-                  <p className="text-[10px] text-amber-600">Keep it going!</p>
+                  {statsLoading ? (
+                    <div className="h-3 bg-amber-200 rounded w-16 animate-pulse" />
+                  ) : (
+                    <>
+                      <p className="text-xs font-semibold text-amber-800">
+                        {currentStreak > 0
+                          ? `${currentStreak} Day Streak`
+                          : longestStreak > 0
+                            ? `Best: ${longestStreak} Days`
+                            : "Start Your Streak!"}
+                      </p>
+                      <p className="text-[10px] text-amber-600">
+                        {currentStreak > 0 ? "Keep it going!" : "Solve a problem today"}
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -113,33 +206,109 @@ const DashboardPage = () => {
           </div>
         </motion.div>
 
-        {/* Mock Stats Row */}
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="grid grid-cols-2 sm:grid-cols-4 gap-4"
-        >
-          {[
-            { label: "Problems Solved", value: `${totalProblemsSolved}`, icon: "🧩", sub: "DSA + Aptitude" },
-            { label: "AI Interviews Done", value: `${interviewStats.completed}`, icon: "🤖", sub: "completed" },
-            { label: "Average AI Score", value: interviewStats.completed > 0 ? `${interviewStats.avgScore}%` : "78%", icon: "📈", sub: "performance" },
-            { label: "Best AI Score", value: interviewStats.completed > 0 ? `${interviewStats.bestScore}%` : "85%", icon: "🏆", sub: "top attempt" }
-          ].map((stat) => (
-            <motion.div
-              key={stat.label}
-              variants={itemVariants}
-              className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{stat.label}</p>
-                <span className="text-xl">{stat.icon}</span>
-              </div>
-              <p className="mt-2 text-3xl font-extrabold text-gray-900">{stat.value}</p>
-              <p className="text-xs text-gray-400 mt-1">{stat.sub}</p>
-            </motion.div>
-          ))}
-        </motion.div>
+        {/* Stats Row — Live from Backend */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Your Progress</h2>
+            {progressSummary && (
+              <span className="text-xs text-gray-400 font-medium">
+                Overall: <span className="font-bold text-indigo-600">{overallPercentage}%</span> complete
+              </span>
+            )}
+          </div>
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-2 sm:grid-cols-4 gap-4"
+          >
+            {statsLoading ? (
+              [1, 2, 3, 4].map((n) => <StatSkeleton key={n} />)
+            ) : (
+              [
+                {
+                  label: "Problems Solved",
+                  value: `${totalProblemsSolved}`,
+                  icon: "🧩",
+                  sub: `${overallPercentage}% overall`
+                },
+                {
+                  label: "AI Interviews Done",
+                  value: `${interviewStats.completed}`,
+                  icon: "🤖",
+                  sub: "completed"
+                },
+                {
+                  label: "Current Streak",
+                  value: currentStreak > 0 ? `${currentStreak}d` : "—",
+                  icon: "🔥",
+                  sub: longestStreak > 0 ? `Best: ${longestStreak} days` : "Start today!"
+                },
+                {
+                  label: "Best AI Score",
+                  value: interviewStats.completed > 0 ? `${interviewStats.bestScore}%` : "85%",
+                  icon: "🏆",
+                  sub: "top attempt"
+                }
+              ].map((stat) => (
+                <motion.div
+                  key={stat.label}
+                  variants={itemVariants}
+                  className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{stat.label}</p>
+                    <span className="text-xl">{stat.icon}</span>
+                  </div>
+                  <p className="mt-2 text-3xl font-extrabold text-gray-900">{stat.value}</p>
+                  <p className="text-xs text-gray-400 mt-1">{stat.sub}</p>
+                </motion.div>
+              ))
+            )}
+          </motion.div>
+        </div>
+
+        {/* Category Breakdown (live from backend) */}
+        {progressSummary && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm"
+          >
+            <h2 className="text-base font-bold text-gray-900 mb-5">Category Breakdown</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              {[
+                { key: "dsa", label: "DSA", emoji: "💻", color: "bg-indigo-500" },
+                { key: "sql", label: "SQL", emoji: "🗄️", color: "bg-blue-500" },
+                { key: "aptitude", label: "Aptitude", emoji: "🧮", color: "bg-amber-500" },
+                { key: "core", label: "CS Fundamentals", emoji: "📚", color: "bg-emerald-500" }
+              ].map(({ key, label, emoji, color }) => {
+                const cat = categoryMap[key] || { solved: 0, total: 0, percentage: 0 };
+                return (
+                  <div key={key} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{emoji}</span>
+                        <span className="text-sm font-semibold text-gray-700">{label}</span>
+                      </div>
+                      <span className="text-xs font-bold text-gray-500">
+                        {cat.solved}/{cat.total}
+                      </span>
+                    </div>
+                    <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${color} rounded-full transition-all duration-700`}
+                        style={{ width: `${cat.percentage}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-gray-400 text-right">{cat.percentage}% complete</p>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
 
         {/* Modules Grid */}
         <div>
@@ -156,7 +325,7 @@ const DashboardPage = () => {
             animate="visible"
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"
           >
-            {PREP_MODULES.map((module) => (
+            {enrichedModules.map((module) => (
               <motion.div
                 key={module.id}
                 variants={itemVariants}
@@ -183,17 +352,21 @@ const DashboardPage = () => {
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs font-semibold text-gray-500">
                       <span>Progress</span>
-                      <span>{module.completedPercentage}%</span>
+                      <span>{module.completedPercentage || 0}%</span>
                     </div>
                     <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-indigo-600 rounded-full transition-all duration-500"
-                        style={{ width: `${module.completedPercentage}%` }}
+                        style={{ width: `${module.completedPercentage || 0}%` }}
                       />
                     </div>
                   </div>
                   <div className="flex items-center justify-between pt-2 border-t border-gray-50">
-                    <span className="text-xs text-gray-400 font-medium">{module.topicsCount} questions</span>
+                    <span className="text-xs text-gray-400 font-medium">
+                      {module.solvedCount !== undefined
+                        ? `${module.solvedCount}/${module.totalCount} solved`
+                        : `${module.topicsCount} questions`}
+                    </span>
                     <Link
                       to={module.path}
                       className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"

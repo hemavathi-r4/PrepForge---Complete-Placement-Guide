@@ -5,6 +5,7 @@ import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import questionRoutes from './routes/questionRoutes.js';
 import companyRoutes from './routes/companyRoutes.js';
+import progressRoutes from './routes/progressRoutes.js';
 import notFound from './middleware/notFoundMiddleware.js';
 import errorHandler from './middleware/errorMiddleware.js';
 
@@ -31,6 +32,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/companies', companyRoutes);
+app.use('/api/progress', progressRoutes);
 
 // Error Handling Middleware
 app.use(notFound);

@@ -1,6 +1,11 @@
 /**
  * Mock data representing PrepForge's training modules.
  * This structure will serve the Landing and Dashboard views.
+ *
+ * Stage 5 Addition:
+ *   - `category` field maps each module to the backend Question category
+ *     (DSA | SQL | APTITUDE | CORE) so the DashboardPage can display
+ *     live progress percentages from the backend progress summary API.
  */
 export const PREP_MODULES = [
   {
@@ -12,7 +17,8 @@ export const PREP_MODULES = [
     difficulty: "Beginner to Advanced",
     topicsCount: 120,
     completedPercentage: 45,
-    popular: true
+    popular: true,
+    category: "DSA"
   },
   {
     id: "cs-fundamentals",
@@ -23,7 +29,8 @@ export const PREP_MODULES = [
     difficulty: "Core Placement",
     topicsCount: 50,
     completedPercentage: 25,
-    popular: true
+    popular: true,
+    category: "CORE"
   },
   {
     id: "company-sheets",
@@ -34,7 +41,8 @@ export const PREP_MODULES = [
     difficulty: "Targeted Tracks",
     topicsCount: 85,
     completedPercentage: 30,
-    popular: true
+    popular: true,
+    category: null // Company sheets span DSA; no single category mapping
   },
   {
     id: "sql-sheet",
@@ -45,7 +53,8 @@ export const PREP_MODULES = [
     difficulty: "All Levels",
     topicsCount: 40,
     completedPercentage: 60,
-    popular: false
+    popular: false,
+    category: "SQL"
   },
   {
     id: "aptitude",
@@ -56,7 +65,8 @@ export const PREP_MODULES = [
     difficulty: "All Levels",
     topicsCount: 85,
     completedPercentage: 20,
-    popular: false
+    popular: false,
+    category: "APTITUDE"
   },
   {
     id: "mock-interviews",
@@ -67,7 +77,8 @@ export const PREP_MODULES = [
     difficulty: "Realistic simulation",
     topicsCount: 15,
     completedPercentage: 0,
-    popular: false
+    popular: false,
+    category: null // Not backed by a Question category
   }
 ];
 
