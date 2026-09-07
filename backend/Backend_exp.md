@@ -1,4 +1,4 @@
-# PrepForge — Backend Stage 1, Stage 2 & Stage 3 Explanation
+# PrepForge — Complete Backend Architecture (Stages 1–6)
 
 ---
 
@@ -1010,9 +1010,283 @@ The backward-walking cursor starts from today. If today has activity, `currentSt
    ```bash
    node scratch/test_stage5_api.js
    ```
-   Expect: `12 passed, 0 failed`.
+   Expect: `46 passed, 0 failed`.
 6. **Unauthenticated Fallback**:
    - Logout, open DSA Sheet → Progress tracked in localStorage only.
    - Protected routes return HTTP 401.
 7. **Cross-Device Sync**:
    - Mark questions solved on device A. Login on device B → Progress synced from backend on mount.
+
+---
+
+# Backend Stage 6: Analytics & Dashboard Backend (B6)
+
+## Overview & Architecture Goals
+
+Stage 6 delivers high-performance, user-specific analytics and dashboard reporting for **PrepForge**. Rather than storing redundant, precomputed metrics that can fall out of sync, Stage 6 leverages **on-demand MongoDB Aggregation Pipelines** and derived computations over existing B5 data collections (`UserProgress`, `UserActivity`, `Question`, `Company`).
+
+### Core Architectural Principles
+1. **Zero Duplicate Storage**: No redundant analytics tables or duplicated progress metrics stored in MongoDB. Metrics are computed dynamically from primary records.
+2. **Reuse Existing B5 Logic**: Reuses `getStreakService` and `getActivityService` from `progressService.js` directly, preventing duplicate logic and drift.
+3. **Strict User Isolation**: All aggregation pipelines and queries filter strictly by `req.user._id` from verified JWTs. No `userId` is accepted from query parameters, request bodies, or route params.
+4. **Mathematical Safety**: All percentage calculations use safe division guards (`safePct`) to prevent `NaN` or `Infinity` when totals are zero, with rounding to two decimal places.
+5. **Continuous Timeline Normalization**: Activity analytics automatically backfills zero-activity calendar days, giving clients continuous time-series data suitable for charts without client-side gap filling.
+6. **100% Backward Compatible UI/UX**: The existing React dashboard visual structure, components, and layout remain preserved while being seamlessly powered by real analytics APIs.
+
+---
+
+## Tech Stack & Aggregation Capabilities (Stage 6)
+
+| Technology | Purpose |
+|---|---|
+| **MongoDB Aggregation Framework** | Multi-stage data processing pipelines (`$match`, `$lookup`, `$unwind`, `$group`, `$sort`) |
+| **Express.js Router** | Dedicated `/api/analytics` route group protected with JWT auth middleware |
+| **Mongoose ODM** | Schema modeling, multi-collection aggregation queries, and lean document querying |
+| **Native Fetch API** | Frontend REST service layer (`analyticsService.js`) |
+
+---
+
+## Architectural Layering
+
+$$\text{HTTP Request} \longrightarrow \text{analyticsRoutes.js} \xrightarrow{\text{protect}} \text{analyticsController.js} \longrightarrow \text{analyticsService.js} \longrightarrow \text{MongoDB Pipelines}$$
+
+1. **Routes (`routes/analyticsRoutes.js`)**:
+   - Applies `protect` middleware globally to all analytics endpoints.
+   - Maps HTTP GET endpoints to controller handlers.
+2. **Controllers (`controllers/analyticsController.js`)**:
+   - Extracts authenticated user ID from `req.user._id`.
+   - Dispatches requests to service functions.
+   - Formats responses with standard dual-key output (`{ success: true, [resourceName], data }`).
+3. **Services (`services/analyticsService.js`)**:
+   - Executes aggregation pipelines and queries.
+   - Enforces business logic, safe percentages, and activity timeline generation.
+   - Imports B5 streak calculation logic directly.
+
+---
+
+## Analytics Endpoints Specification
+
+All endpoints are prefixed with `/api/analytics` and require `Authorization: Bearer <token>`.
+
+### 1. Overview Analytics (`GET /api/analytics/overview`)
+Returns high-level summary metrics for the authenticated user's dashboard.
+
+#### Aggregation & Computation:
+- `Question.countDocuments({})`: Total questions cataloged in the system.
+- `UserProgress.countDocuments({ user: userId, solved: true })`: Total solved by user.
+- `getStreakService(userId)`: Reused streak computation (current & longest).
+- `UserActivity`: Dynamic window calculation for `todaySolved`, `thisWeekSolved` (7-day window), and `thisMonthSolved` (30-day window).
+- `safePct(solved, total)`: Safe percentage with 2 decimal precision.
+
+#### Sample Response:
+```json
+{
+  "success": true,
+  "overview": {
+    "totalQuestions": 125,
+    "totalSolved": 12,
+    "overallPercentage": 9.6,
+    "currentStreak": 2,
+    "longestStreak": 5,
+    "todaySolved": 3,
+    "thisWeekSolved": 8,
+    "thisMonthSolved": 12
+  }
+}
+```
+
+---
+
+### 2. Category Analytics (`GET /api/analytics/category`)
+Returns progress breakdowns for all 4 primary curriculum categories (`DSA`, `SQL`, `APTITUDE`, `CORE`).
+
+#### Aggregation Pipeline:
+```javascript
+// Solved questions per category via UserProgress + Question lookup
+UserProgress.aggregate([
+  { $match: { user: new mongoose.Types.ObjectId(userId), solved: true } },
+  {
+    $lookup: {
+      from: 'questions',
+      localField: 'question',
+      foreignField: '_id',
+      as: 'q'
+    }
+  },
+  { $unwind: '$q' },
+  { $group: { _id: '$q.category', solved: { $sum: 1 } } }
+]);
+```
+
+#### Sample Response:
+```json
+{
+  "success": true,
+  "count": 4,
+  "categories": [
+    { "category": "DSA", "total": 68, "solved": 8, "unsolved": 60, "percentage": 11.76 },
+    { "category": "SQL", "total": 34, "solved": 3, "unsolved": 31, "percentage": 8.82 },
+    { "category": "APTITUDE", "total": 10, "solved": 1, "unsolved": 9, "percentage": 10 },
+    { "category": "CORE", "total": 13, "solved": 0, "unsolved": 13, "percentage": 0 }
+  ]
+}
+```
+
+---
+
+### 3. Topic Analytics (`GET /api/analytics/topic`)
+Returns progress metrics broken down by individual topic (e.g. Arrays, Dynamic Programming, Joins, Normalization).
+
+#### Aggregation Pipeline:
+- Aggregates all distinct topics and counts from `Question`.
+- Aggregates user's solved question counts per topic from `UserProgress` via `$lookup`.
+- Combines metrics into an array sorted by total questions descending.
+
+#### Sample Response:
+```json
+{
+  "success": true,
+  "count": 18,
+  "topics": [
+    { "topic": "Arrays", "total": 15, "solved": 4, "unsolved": 11, "percentage": 26.67 },
+    { "topic": "Strings", "total": 12, "solved": 2, "unsolved": 10, "percentage": 16.67 },
+    { "topic": "Trees", "total": 10, "solved": 1, "unsolved": 9, "percentage": 10.0 }
+  ]
+}
+```
+
+---
+
+### 4. Difficulty Analytics (`GET /api/analytics/difficulty`)
+Returns question completion metrics categorized by difficulty tiers (`Easy`, `Medium`, `Hard`).
+
+#### Sample Response:
+```json
+{
+  "success": true,
+  "difficulty": [
+    { "difficulty": "Easy", "total": 45, "solved": 7, "unsolved": 38, "percentage": 15.56 },
+    { "difficulty": "Medium", "total": 60, "solved": 4, "unsolved": 56, "percentage": 6.67 },
+    { "difficulty": "Hard", "total": 20, "solved": 1, "unsolved": 19, "percentage": 5.0 }
+  ]
+}
+```
+
+---
+
+### 5. Activity Timeline Analytics (`GET /api/analytics/activity?days=30`)
+Returns a continuous, gap-free daily activity history for charting and streak tracking.
+
+#### Continuous Date Normalization:
+Even if the user was inactive on certain days, the service generates a complete calendar date array spanning the requested window (`1` to `365` days, default `30`) and populates `questionsSolved: 0` for days without records.
+
+#### Sample Response:
+```json
+{
+  "success": true,
+  "days": 7,
+  "activity": [
+    { "date": "2026-09-01", "questionsSolved": 0 },
+    { "date": "2026-09-02", "questionsSolved": 2 },
+    { "date": "2026-09-03", "questionsSolved": 0 },
+    { "date": "2026-09-04", "questionsSolved": 1 },
+    { "date": "2026-09-05", "questionsSolved": 0 },
+    { "date": "2026-09-06", "questionsSolved": 3 },
+    { "date": "2026-09-07", "questionsSolved": 2 }
+  ]
+}
+```
+
+---
+
+### 6. Company Analytics (`GET /api/analytics/company`)
+Returns solved vs. total metrics for individual target companies (Google, Amazon, Microsoft, etc.).
+
+#### Aggregation Strategy:
+- Questions store associated companies in `companySlugs: ['google', 'amazon', ...]`.
+- Pipeline unwinds `companySlugs`, groups by slug to count totals.
+- Matches user's solved question IDs against questions with matching slugs.
+- Resolves official company names from the `Company` collection.
+
+#### Sample Response:
+```json
+{
+  "success": true,
+  "count": 6,
+  "companies": [
+    { "company": "Amazon", "slug": "amazon", "total": 28, "solved": 5, "unsolved": 23, "percentage": 17.86 },
+    { "company": "Google", "slug": "google", "total": 24, "solved": 3, "unsolved": 21, "percentage": 12.5 },
+    { "company": "Microsoft", "slug": "microsoft", "total": 22, "solved": 4, "unsolved": 18, "percentage": 18.18 }
+  ]
+}
+```
+
+---
+
+## Frontend Integration (Stage 6)
+
+### Files Modified/Created
+
+| File | Change | Responsibility |
+|---|---|---|
+| `frontend/src/services/analyticsService.js` | **[NEW]** | Client API wrapper for all 6 `/api/analytics` routes |
+| `frontend/src/pages/DashboardPage.jsx` | **[MODIFIED]** | Connects to `getAnalyticsOverview`, updates stats row without UI disruption |
+| `backend/services/analyticsService.js` | **[NEW]** | Core analytics aggregation pipelines and business computations |
+| `backend/controllers/analyticsController.js` | **[NEW]** | HTTP controller endpoints for analytics routes |
+| `backend/routes/analyticsRoutes.js` | **[NEW]** | Express router mounted at `/api/analytics` |
+| `backend/app.js` | **[MODIFIED]** | Mounted `/api/analytics` route handler |
+| `backend/scratch/test_stage6_api.js` | **[NEW]** | Automated test suite verifying all 6 endpoints |
+
+---
+
+## Interview Preparation & QA Guide (Stage 6)
+
+### Q1: Why use MongoDB Aggregation pipelines instead of storing precomputed analytics numbers on the User document?
+**Answer:**
+Storing precomputed counters (e.g., `user.dsaSolvedCount`) introduces severe **data anomalies and synchronization bugs**. If a question's category is edited, a solved question is deleted, or a transaction fails halfway, the cached counters become corrupted. Deriving metrics on-demand via `$match` and `$group` guarantees **single-source-of-truth accuracy**, eliminating write anomalies.
+
+### Q2: How does the analytics service prevent Division by Zero when computing percentages?
+**Answer:**
+Through the helper function `safePct(solved, total)`:
+```javascript
+const safePct = (solved, total) =>
+  total > 0 ? Math.round((solved / total) * 10000) / 100 : 0;
+```
+If a category or topic currently has 0 questions (`total === 0`), it immediately returns `0` instead of JavaScript's `NaN` or `Infinity`, and rounds values to two decimal places.
+
+### Q3: Why does `getActivityAnalyticsService` fill in missing dates with `questionsSolved: 0`?
+**Answer:**
+Sparse activity logs (storing only days when questions were solved) are space-efficient in the database. However, frontend charts (line charts, heatmaps, bar charts) require a continuous time series. Backfilling zeroes on the backend guarantees chronological continuity, eliminates client-side timezone bugs, and reduces frontend complexity.
+
+### Q4: How is User Isolation enforced across all analytics queries?
+**Answer:**
+User identity is never accepted from the request body, URL path, or query string. Instead, the `protect` JWT middleware decodes the token from the `Authorization` header and attaches the verified user to `req.user`. Every database query and aggregation pipeline begins with `{ $match: { user: req.user._id } }`. It is architecturally impossible for one user to query another user's analytics.
+
+### Q5: How does the Company Analytics aggregation handle questions mapped to multiple companies?
+**Answer:**
+Questions contain an array of company slugs (`companySlugs: ['google', 'amazon']`). The aggregation pipeline utilizes the `$unwind: '$companySlugs'` stage to deconstruct the array into individual documents per slug before grouping. This allows a single multi-company question to accurately contribute to each respective company's statistics.
+
+---
+
+## Stage 6 Verification Checklist
+
+1. **Automated Test Suite**:
+   ```bash
+   node scratch/test_stage6_api.js
+   ```
+   *Verified: 58 passed, 0 failed.*
+2. **Regression Test Suite (Stage 5)**:
+   ```bash
+   node scratch/test_stage5_api.js
+   ```
+   *Verified: 46 passed, 0 failed.*
+3. **Frontend Production Build**:
+   ```bash
+   npm.cmd run build
+   ```
+   *Verified: Built successfully with 0 errors.*
+4. **Security & Authentication**:
+   - Requesting any `/api/analytics/*` endpoint without token returns HTTP 401.
+   - User A and User B maintain completely isolated analytics data.
+5. **Continuous Activity Timeline**:
+   - `GET /api/analytics/activity?days=30` returns 30 consecutive calendar days in chronological order.

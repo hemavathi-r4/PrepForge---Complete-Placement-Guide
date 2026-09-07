@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useSheetProgress } from "../context/SheetProgressContext";
 import { getProgressSummary, getStreak } from "../services/progressService";
+import { getAnalyticsOverview, getDifficultyAnalytics } from "../services/analyticsService";
 import { PREP_MODULES, MOCK_TESTS } from "../data/mockQuestions";
 import {
   FaCode, FaChartLine, FaNetworkWired, FaDatabase,
@@ -53,9 +54,10 @@ const DashboardPage = () => {
   const { getInterviewStats } = useSheetProgress();
   const interviewStats = getInterviewStats();
 
-  // ── Stage 5: Backend progress data ──────────────────────────
+  // ── Stage 5 & 6: Backend progress & analytics data ──────────
   const [progressSummary, setProgressSummary] = useState(null);
   const [streakData, setStreakData] = useState(null);
+  const [analyticsOverview, setAnalyticsOverview] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
@@ -71,14 +73,16 @@ const DashboardPage = () => {
 
       setStatsLoading(true);
       try {
-        const [summaryRes, streakRes] = await Promise.all([
+        const [summaryRes, streakRes, overviewRes] = await Promise.all([
           getProgressSummary(),
-          getStreak()
+          getStreak(),
+          getAnalyticsOverview()
         ]);
 
         if (isMounted) {
           if (summaryRes.success) setProgressSummary(summaryRes.summary);
           if (streakRes.success) setStreakData(streakRes.streak);
+          if (overviewRes.success) setAnalyticsOverview(overviewRes.overview);
         }
       } catch (err) {
         console.error("Dashboard: failed to load backend stats", err);
@@ -91,17 +95,22 @@ const DashboardPage = () => {
     return () => { isMounted = false; };
   }, []);
 
-  // ── Derived display values ───────────────────────────────────
-  const totalProblemsSolved = progressSummary
-    ? progressSummary.totalSolved
-    : 0;
+  // ── Derived display values (preferring B6 analytics overview, fallback to B5 progress summary) ──
+  const totalProblemsSolved = analyticsOverview
+    ? analyticsOverview.totalSolved
+    : (progressSummary ? progressSummary.totalSolved : 0);
 
-  const overallPercentage = progressSummary
-    ? progressSummary.overallPercentage
-    : 0;
+  const overallPercentage = analyticsOverview
+    ? analyticsOverview.overallPercentage
+    : (progressSummary ? progressSummary.overallPercentage : 0);
 
-  const currentStreak = streakData ? streakData.current : 0;
-  const longestStreak = streakData ? streakData.longest : 0;
+  const currentStreak = analyticsOverview
+    ? analyticsOverview.currentStreak
+    : (streakData ? streakData.current : 0);
+
+  const longestStreak = analyticsOverview
+    ? analyticsOverview.longestStreak
+    : (streakData ? streakData.longest : 0);
 
   // Category breakdown for module progress bars (live from backend)
   const categoryMap = progressSummary?.categoryBreakdown || {};
@@ -230,7 +239,9 @@ const DashboardPage = () => {
                   label: "Problems Solved",
                   value: `${totalProblemsSolved}`,
                   icon: "🧩",
-                  sub: `${overallPercentage}% overall`
+                  sub: analyticsOverview?.todaySolved > 0
+                    ? `${analyticsOverview.todaySolved} solved today`
+                    : `${overallPercentage}% overall`
                 },
                 {
                   label: "AI Interviews Done",
