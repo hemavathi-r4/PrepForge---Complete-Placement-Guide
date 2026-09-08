@@ -1,184 +1,127 @@
 /**
  * ─────────────────────────────────────────────────────────────
- * PrepForge — Auth Service  (src/services/api.js)
+ * PrepForge — Centralized API Client (src/services/api.js)
  * ─────────────────────────────────────────────────────────────
- * This module is intentionally designed to mirror a real REST
- * API contract.  Every method:
- *   • Accepts a single request-object  (mirrors fetch body)
- *   • Returns a response envelope      { success, data, error }
- *   • Uses simulated network latency   (drop-in for real fetch)
- *
- * MIGRATION GUIDE — switching to a real backend later:
- *   Replace the localStorage logic inside each function with:
- *     const res = await fetch('/api/auth/<endpoint>', { ... });
- *     const json = await res.json();
- *     return json;          ← same envelope shape, zero UI changes
+ * Provides a unified HTTP request client for all frontend services.
+ * Features:
+ *   • Resolves base API URL from environment (VITE_API_URL).
+ *   • Automatically injects JWT Authorization header if present.
+ *   • Sets default JSON headers for request bodies.
+ *   • Centralized 401 Unauthorized interceptor that clears stale
+ *     tokens and dispatches an auth event.
+ *   • Consistent error format { success: false, message, error }.
+ *   • Standard HTTP helpers: api.get, api.post, api.put, api.delete.
  * ─────────────────────────────────────────────────────────────
  */
 
-// ── Storage keys ─────────────────────────────────────────────
-const KEYS = {
-  USERS:        "prepforge_users",
-  SESSION_LS:   "prepforge_session",   // localStorage  (remember me)
-  SESSION_SS:   "prepforge_session",   // sessionStorage (tab-only)
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+export const TOKEN_KEY = 'prepforge_token';
+export const USER_KEY = 'prepforge_current_user';
+
+/**
+ * Retrieve the stored JWT token
+ */
+export const getToken = () => localStorage.getItem(TOKEN_KEY);
+
+/**
+ * Remove stored credentials and clear authentication state
+ */
+export const clearAuthStorage = () => {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(USER_KEY);
 };
 
-// ── Simulated network delay ───────────────────────────────────
-const simulateRequest = (ms = 700) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Centralized API request wrapper
+ * @param {string} endpoint - Relative path (e.g. '/auth/login' or '/questions')
+ * @param {object} options - Fetch options (method, body, headers, etc.)
+ */
+export const apiRequest = async (endpoint, options = {}) => {
+  // Ensure endpoint starts with a slash if not provided
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE_URL}${path}`;
 
-// ── Response envelope helpers ─────────────────────────────────
-const ok    = (data)    => ({ success: true,  data,  error: null });
-const fail  = (message) => ({ success: false, data:  null, error: message });
+  const token = getToken();
 
-// ── Internal helpers ──────────────────────────────────────────
-const getUsers = () =>
-  JSON.parse(localStorage.getItem(KEYS.USERS) || "[]");
+  const defaultHeaders = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers || {})
+  };
 
-const saveUsers = (users) =>
-  localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+  // If body is an object and not already stringified, serialize it
+  let body = options.body;
+  if (body && typeof body === 'object' && !(body instanceof FormData)) {
+    body = JSON.stringify(body);
+  }
 
-/** Strip sensitive fields before storing in session */
-const sanitizeUser = (user) => ({
-  id:        user.id,
-  name:      user.name,
-  email:     user.email,
-  role:      user.role || "student",
-  joinedAt:  user.joinedAt,
-});
+  const config = {
+    ...options,
+    headers: defaultHeaders,
+    body
+  };
 
-/** Persist the current session (localStorage or sessionStorage) */
-const persistSession = (user, rememberMe = false) => {
-  const payload = JSON.stringify(sanitizeUser(user));
-  if (rememberMe) {
-    localStorage.setItem(KEYS.SESSION_LS, payload);
-    sessionStorage.removeItem(KEYS.SESSION_SS);
-  } else {
-    sessionStorage.setItem(KEYS.SESSION_SS, payload);
-    localStorage.removeItem(KEYS.SESSION_LS);
+  try {
+    const response = await fetch(url, config);
+
+    // Handle 401 Unauthorized centrally
+    if (response.status === 401) {
+      // Clear invalid credentials
+      clearAuthStorage();
+
+      // Dispatch global event for AuthContext / UI listeners
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('prepforge:unauthorized'));
+      }
+    }
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      data = { success: response.ok, message: text };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.message || `Request failed with status ${response.status}`,
+        message: data.message || `Request failed with status ${response.status}`,
+        status: response.status,
+        ...data
+      };
+    }
+
+    return {
+      success: true,
+      ...data
+    };
+  } catch (error) {
+    console.error(`[API Error] ${options.method || 'GET'} ${path}:`, error);
+    return {
+      success: false,
+      error: 'Unable to connect to PrepForge server. Please check your network or ensure backend is running.',
+      message: 'Unable to connect to PrepForge server. Please check your network or ensure backend is running.',
+      isNetworkError: true
+    };
   }
 };
 
-/** Read from either storage (localStorage first, then sessionStorage) */
-const readSession = () => {
-  const ls = localStorage.getItem(KEYS.SESSION_LS);
-  if (ls) return JSON.parse(ls);
-  const ss = sessionStorage.getItem(KEYS.SESSION_SS);
-  if (ss) return JSON.parse(ss);
-  return null;
+/**
+ * Convenience methods for HTTP operations
+ */
+export const api = {
+  get: (endpoint, options = {}) => apiRequest(endpoint, { ...options, method: 'GET' }),
+  post: (endpoint, body, options = {}) => apiRequest(endpoint, { ...options, method: 'POST', body }),
+  put: (endpoint, body, options = {}) => apiRequest(endpoint, { ...options, method: 'PUT', body }),
+  delete: (endpoint, options = {}) => apiRequest(endpoint, { ...options, method: 'DELETE' }),
+  getToken,
+  clearAuthStorage,
+  API_BASE_URL
 };
 
-/** Clear all session data from both storages */
-const clearSession = () => {
-  localStorage.removeItem(KEYS.SESSION_LS);
-  sessionStorage.removeItem(KEYS.SESSION_SS);
-};
-
-
-// ═════════════════════════════════════════════════════════════
-// AUTH SERVICE — Public API
-// ═════════════════════════════════════════════════════════════
-export const authService = {
-
-  /**
-   * POST /api/auth/signup
-   * @param {{ name: string, email: string, password: string }} requestBody
-   * @returns {Promise<{ success: boolean, data: User|null, error: string|null }>}
-   */
-  async signup({ name, email, password }) {
-    await simulateRequest(900);
-
-    // Validation (mirrors server-side 400 responses)
-    if (!name?.trim())     return fail("Full name is required.");
-    if (!email?.trim())    return fail("Email address is required.");
-    if (!password)         return fail("Password is required.");
-    if (password.length < 6)
-      return fail("Password must be at least 6 characters.");
-
-    const users = getUsers();
-
-    if (users.some((u) => u.email.toLowerCase() === email.toLowerCase()))
-      return fail("An account with this email already exists.");
-
-    const newUser = {
-      id:       `usr_${Date.now()}`,
-      name:     name.trim(),
-      email:    email.toLowerCase().trim(),
-      password, // In production: server hashes this — never stored plain
-      role:     "student",
-      joinedAt: new Date().toISOString(),
-    };
-
-    saveUsers([...users, newUser]);
-    // New signups always get a session-storage session (no rememberMe yet)
-    persistSession(newUser, false);
-
-    return ok(sanitizeUser(newUser));
-  },
-
-  /**
-   * POST /api/auth/login
-   * @param {{ email: string, password: string, rememberMe?: boolean }} requestBody
-   * @returns {Promise<{ success: boolean, data: User|null, error: string|null }>}
-   */
-  async login({ email, password, rememberMe = false }) {
-    await simulateRequest(800);
-
-    if (!email?.trim())  return fail("Email address is required.");
-    if (!password)       return fail("Password is required.");
-
-    const users  = getUsers();
-    const user   = users.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase().trim()
-    );
-
-    if (!user || user.password !== password)
-      return fail("Invalid email or password.");
-
-    persistSession(user, rememberMe);
-    return ok(sanitizeUser(user));
-  },
-
-  /**
-   * POST /api/auth/logout
-   * @returns {Promise<{ success: boolean, data: null, error: null }>}
-   */
-  async logout() {
-    await simulateRequest(300);
-    clearSession();
-    return ok(null);
-  },
-
-  /**
-   * GET /api/auth/me  — restore session on app load
-   * @returns {Promise<{ success: boolean, data: User|null, error: null }>}
-   */
-  async getSession() {
-    await simulateRequest(100);
-    const user = readSession();
-    return ok(user); // data is null when no session — NOT an error
-  },
-
-  /**
-   * POST /api/auth/forgot-password
-   * @param {{ email: string }} requestBody
-   * @returns {Promise<{ success: boolean, data: { message: string }|null, error: string|null }>}
-   */
-  async forgotPassword({ email }) {
-    await simulateRequest(700);
-
-    if (!email?.trim()) return fail("Email address is required.");
-
-    const users = getUsers();
-    const exists = users.some(
-      (u) => u.email.toLowerCase() === email.toLowerCase().trim()
-    );
-
-    // Security: always return success (don't leak account existence)
-    return ok({
-      message: exists
-        ? `A password reset link has been sent to ${email}.`
-        : `If an account exists for ${email}, a reset link will be sent.`,
-    });
-  },
-};
+export default api;

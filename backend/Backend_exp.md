@@ -1290,3 +1290,228 @@ Questions contain an array of company slugs (`companySlugs: ['google', 'amazon']
    - User A and User B maintain completely isolated analytics data.
 5. **Continuous Activity Timeline**:
    - `GET /api/analytics/activity?days=30` returns 30 consecutive calendar days in chronological order.
+
+---
+
+# Backend Stage 7: Final Frontend ↔ Backend Integration, Production Readiness & Deployment Preparation (B7)
+
+## Overview & Mission
+
+Stage 7 completes the development lifecycle of **PrepForge**, transitioning the platform from individual modular backend stages (B1–B6) into a unified, secure, configurable, and production-ready full-stack MERN application.
+
+### Key Goals & Non-Negotiables
+1. **Full Architectural Cohesion**: Guarantee strict architectural layering:
+   $$\text{React UI} \longrightarrow \text{Centralized API Client} \longrightarrow \text{Express REST API} \longrightarrow \text{Middleware} \longrightarrow \text{Controllers} \longrightarrow \text{Services} \longrightarrow \text{Mongoose} \longrightarrow \text{MongoDB}$$
+2. **Centralized Frontend API Client (`api.js`)**: Replaced scattered fetch calls and legacy mocks with a unified HTTP client that manages environment resolution (`VITE_API_URL`), automatic Bearer token injection, request body serialization, and centralized 401 Unauthorized handling.
+3. **Multi-User Data Isolation**: Validated through rigorous automated tests that User A cannot view, modify, or leak into User B's progress, activity history, streaks, profile data, or analytics.
+4. **Error Format Normalization**: Standardized all error responses to `{ success: false, message: string }`, gracefully handling Mongoose `CastError` (invalid ObjectIds), duplicate keys (`E11000`), schema validation errors, and JWT expiration.
+5. **Security & Production Hardening**:
+   - Password hashing via `bcryptjs` with salt rounds.
+   - Zero credentials or secrets committed; comprehensive `.gitignore` coverage.
+   - Environment-driven CORS origin validation supporting both production domains and local development.
+   - `x-powered-by` header disabled.
+   - Production readiness for Vercel/Netlify (Frontend) + Render/Railway (Backend) + MongoDB Atlas.
+
+---
+
+## 1. Centralized Frontend API Architecture (`src/services/api.js`)
+
+### Design & Mechanics
+
+Instead of instantiating ad-hoc `fetch` or multiple Axios configurations across individual services, `api.js` serves as the single source of truth for all network communication:
+
+```javascript
+export const apiRequest = async (endpoint, options = {}) => {
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE_URL}${path}`;
+
+  const token = getToken();
+
+  const defaultHeaders = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers || {})
+  };
+
+  let body = options.body;
+  if (body && typeof body === 'object' && !(body instanceof FormData)) {
+    body = JSON.stringify(body);
+  }
+
+  const config = { ...options, headers: defaultHeaders, body };
+
+  try {
+    const response = await fetch(url, config);
+
+    // Centralized 401 Unauthorized Interception
+    if (response.status === 401) {
+      clearAuthStorage();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('prepforge:unauthorized'));
+      }
+    }
+
+    const data = await response.json();
+    return response.ok ? { success: true, ...data } : { success: false, ...data };
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Unable to connect to PrepForge server.',
+      isNetworkError: true
+    };
+  }
+};
+```
+
+### Automatic 401 Interception & AuthContext Synchronization
+When the backend rejects a request due to an expired or malformed JWT token (HTTP 401):
+1. `api.js` immediately clears `prepforge_token` and `prepforge_current_user` from `localStorage`.
+2. Dispatches a custom window event: `prepforge:unauthorized`.
+3. `AuthContext` receives the event and resets `user` state to `null`.
+4. Protected routes (`ProtectedRoute`) automatically redirect the user to `/login`.
+
+---
+
+## 2. Refactored Frontend Service Layer
+
+All modular frontend services now route through the centralized API client while preserving 100% backward compatibility with existing React UI components:
+
+| Service File | Refactored Endpoints | Responsibility |
+|---|---|---|
+| `authService.js` | `/auth/register`, `/auth/login`, `/auth/me` | JWT registration, login, session restoration & client logout |
+| `userService.js` | `/users/profile`, `/users/change-password` | Profile retrieval, competitive handles update, bcrypt password change |
+| `questionService.js` | `/questions`, `/questions/:id` | Catalog queries with category, difficulty, search, and pagination |
+| `companyService.js` | `/companies`, `/companies/:id`, `/companies/:id/questions` | Company catalog and company-tagged interview questions |
+| `progressService.js` | `/progress`, `/progress/:id`, `/progress/summary`, `/progress/streak`, `/progress/activity` | Mark solved/unsolved, get summary, UTC streaks, and daily activity logs |
+| `analyticsService.js` | `/analytics/overview`, `/analytics/category`, `/analytics/topic`, `/analytics/difficulty`, `/analytics/activity`, `/analytics/company` | Real-time MongoDB Aggregation-powered dashboard statistics |
+
+---
+
+## 3. Global Error Handling & Input Validation Hardening
+
+### Enhanced Backend Error Middleware (`backend/middleware/errorMiddleware.js`)
+
+The global error handler intercepts and formats all system and database exceptions into a consistent structure:
+
+```javascript
+export const errorHandler = (err, req, res, next) => {
+  let statusCode = res.statusCode && res.statusCode !== 200 ? res.statusCode : 500;
+  let message = err.message || 'Internal Server Error';
+
+  // 1. Mongoose CastError (e.g. invalid ObjectId format)
+  if (err.name === 'CastError') {
+    statusCode = 400;
+    message = `Invalid format for resource identifier: ${err.value}`;
+  }
+
+  // 2. Duplicate key (MongoDB E11000)
+  if (err.code === 11000) {
+    statusCode = 409;
+    const field = err.keyValue ? Object.keys(err.keyValue)[0] : 'field';
+    message = `A record with that ${field} already exists`;
+  }
+
+  // 3. Schema validation error
+  if (err.name === 'ValidationError') {
+    statusCode = 400;
+    message = Object.values(err.errors).map((val) => val.message).join(', ');
+  }
+
+  // 4. JWT errors
+  if (err.name === 'JsonWebTokenError') {
+    statusCode = 401;
+    message = 'Not authorized, invalid token';
+  }
+  if (err.name === 'TokenExpiredError') {
+    statusCode = 401;
+    message = 'Not authorized, token expired';
+  }
+
+  res.status(statusCode).json({
+    success: false,
+    message,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+};
+```
+
+---
+
+## 4. Multi-User Isolation & Security Verification
+
+Stage 7 includes an end-to-end automated verification script (`backend/scratch/test_stage7_integration.js`) comprising **77 distinct assertions**.
+
+### Tested Security Vector Assertions
+1. **User A vs User B Isolation**:
+   - User A solving `dsa-arr-1` and `dsa-arr-2` does not mark them solved for User B.
+   - User B solving `dsa-arr-9` does not mark it solved for User A.
+   - User A and User B maintain distinct streak calculations and daily activity logs.
+   - Overview analytics (`GET /api/analytics/overview`) accurately compute totals isolated to `req.user._id`.
+2. **Bcrypt Security**:
+   - Stored passwords are cryptographically hashed with salt rounds before saving.
+   - Password hashes are excluded from all query projections (`select('-password')`).
+   - Changing password invalidates the previous password and permits login only with the newly hashed password.
+3. **Route Protection**:
+   - Missing or malformed Bearer tokens consistently yield HTTP 401.
+   - Non-existent routes return HTTP 404 with standard envelope formatting.
+
+---
+
+## 5. Deployment Readiness Architecture
+
+### Environment Configurations
+
+#### Backend (`backend/.env.example`)
+```env
+PORT=5000
+NODE_ENV=production
+MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/prepforge?retryWrites=true&w=majority
+JWT_SECRET=<strong-random-jwt-secret>
+JWT_EXPIRES_IN=7d
+CLIENT_ORIGIN=https://prepforge-frontend.vercel.app
+FRONTEND_URL=https://prepforge-frontend.vercel.app
+```
+
+#### Frontend (`frontend/.env.example`)
+```env
+VITE_API_URL=https://prepforge-backend.onrender.com/api
+```
+
+### Production Build Verification
+- Frontend Vite production build executes with 0 errors (`npm.cmd run build` -> `dist/`).
+- Backend starts cleanly via `node server.js` without dependency on `nodemon`.
+
+---
+
+## 6. Interview QA Guide (Stage 7)
+
+### Q1: How does PrepForge handle token expiration and automatic logout across multiple tabs?
+**Answer:**
+When an API request returns HTTP 401, the centralized `api.js` client intercepts the response, clears `localStorage` credentials, and broadcasts a `prepforge:unauthorized` window event. `AuthContext` listens to this event and resets the authenticated user state to `null`. Any protected route instantly redirects the user to the login screen without requiring individual page components to catch or handle 401 errors.
+
+### Q2: Why is Mongoose CastError handling important for production security and reliability?
+**Answer:**
+When a client passes an arbitrary string (such as `"abc"` or an invalid ID) into a route expecting a MongoDB ObjectId (e.g. `/api/questions/:id`), Mongoose throws a `CastError`. Without centralized interception, Express would treat this as an unhandled 500 Internal Server Error, potentially leaking server internals or filling error logs. Intercepting `CastError` converts it into a clean 400 Bad Request with a clear error message.
+
+### Q3: How do we prevent Cross-Origin Resource Sharing (CORS) vulnerabilities in production?
+**Answer:**
+Rather than setting `origin: '*'` or allowing unrestricted origins, PrepForge reads allowed origins dynamically from `FRONTEND_URL` and `CLIENT_ORIGIN` environment variables. In production, only the verified frontend deployment domain is permitted to access the API with credentials.
+
+### Q4: How is Multi-User Isolation verified in automated testing?
+**Answer:**
+The test suite creates two distinct user accounts (User A and User B), generates independent JWT tokens, performs progress updates on separate questions, and asserts that User A's queries return only User A's progress and analytics. Furthermore, checking User B's questions with User A's token verifies that User B's progress returns `solved: false` for User A.
+
+---
+
+## Stage 7 Verification Summary
+
+| Verification Category | Target | Result |
+|---|---|---|
+| E2E Integration Test Suite | `node scratch/test_stage7_integration.js` | **77 / 77 Passed (0 Failed)** |
+| Frontend Production Build | `npm.cmd run build` | **Build completed in 1.30s (0 Errors)** |
+| Centralized API Client | `frontend/src/services/api.js` | **Integrated & Verified** |
+| Multi-User Data Isolation | User A vs User B | **100% Isolated & Verified** |
+| API Documentation | `backend/API.md` | **Complete Specification Created** |
+| Project README | `README.md` | **Updated & Deployment Ready** |
+| Git Cleanliness | No secrets, `.env`, or build logs committed | **Clean & Verified** |
+

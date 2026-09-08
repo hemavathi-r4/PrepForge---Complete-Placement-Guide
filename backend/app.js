@@ -12,15 +12,32 @@ import errorHandler from './middleware/errorMiddleware.js';
 
 const app = express();
 
+// Security: Disable X-Powered-By header
+app.disable('x-powered-by');
+
 // Middleware: Request Body Parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Middleware: CORS Configuration
-const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.CLIENT_ORIGIN,
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173'
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: clientOrigin,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (such as mobile apps, curl, server-to-server)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+      return callback(new Error('Blocked by CORS policy'));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']

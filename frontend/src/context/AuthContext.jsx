@@ -43,8 +43,18 @@ export const AuthProvider = ({ children }) => {
 
     verifySession();
 
+    // Listen for global 401 unauthorized events from centralized api client
+    const handleUnauthorized = () => {
+      if (isMounted) {
+        setUser(null);
+      }
+    };
+
+    window.addEventListener("prepforge:unauthorized", handleUnauthorized);
+
     return () => {
       isMounted = false;
+      window.removeEventListener("prepforge:unauthorized", handleUnauthorized);
     };
   }, []);
 

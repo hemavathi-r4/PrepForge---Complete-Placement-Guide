@@ -15,19 +15,7 @@
  * ─────────────────────────────────────────────────────────────
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-const TOKEN_KEY = 'prepforge_token';
-
-/**
- * Helper: Build Authorization header from stored JWT token.
- */
-const authHeaders = () => {
-  const token = localStorage.getItem(TOKEN_KEY);
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {})
-  };
-};
+import api from './api';
 
 /**
  * Fetch dashboard overview analytics for the authenticated user.
@@ -39,34 +27,20 @@ const authHeaders = () => {
  * @returns {{ success: boolean, overview?: object, error?: string }}
  */
 export const getAnalyticsOverview = async () => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/analytics/overview`, {
-      method: 'GET',
-      headers: authHeaders()
-    });
+  const data = await api.get('/analytics/overview');
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.message || 'Failed to fetch analytics overview',
-        overview: null
-      };
-    }
-
-    return {
-      success: true,
-      overview: data.overview || data.data
-    };
-  } catch (error) {
-    console.error('Error fetching analytics overview:', error);
+  if (!data.success) {
     return {
       success: false,
-      error: 'Unable to connect to server.',
+      error: data.message || data.error || 'Failed to fetch analytics overview',
       overview: null
     };
   }
+
+  return {
+    success: true,
+    overview: data.overview || data.data
+  };
 };
 
 /**
@@ -78,34 +52,20 @@ export const getAnalyticsOverview = async () => {
  * @returns {{ success: boolean, categories?: Array, error?: string }}
  */
 export const getCategoryAnalytics = async () => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/analytics/category`, {
-      method: 'GET',
-      headers: authHeaders()
-    });
+  const data = await api.get('/analytics/category');
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.message || 'Failed to fetch category analytics',
-        categories: []
-      };
-    }
-
-    return {
-      success: true,
-      categories: data.categories || data.data || []
-    };
-  } catch (error) {
-    console.error('Error fetching category analytics:', error);
+  if (!data.success) {
     return {
       success: false,
-      error: 'Unable to connect to server.',
+      error: data.message || data.error || 'Failed to fetch category analytics',
       categories: []
     };
   }
+
+  return {
+    success: true,
+    categories: data.categories || data.data || []
+  };
 };
 
 /**
@@ -117,34 +77,20 @@ export const getCategoryAnalytics = async () => {
  * @returns {{ success: boolean, topics?: Array, error?: string }}
  */
 export const getTopicAnalytics = async () => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/analytics/topic`, {
-      method: 'GET',
-      headers: authHeaders()
-    });
+  const data = await api.get('/analytics/topic');
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.message || 'Failed to fetch topic analytics',
-        topics: []
-      };
-    }
-
-    return {
-      success: true,
-      topics: data.topics || data.data || []
-    };
-  } catch (error) {
-    console.error('Error fetching topic analytics:', error);
+  if (!data.success) {
     return {
       success: false,
-      error: 'Unable to connect to server.',
+      error: data.message || data.error || 'Failed to fetch topic analytics',
       topics: []
     };
   }
+
+  return {
+    success: true,
+    topics: data.topics || data.data || []
+  };
 };
 
 /**
@@ -156,34 +102,20 @@ export const getTopicAnalytics = async () => {
  * @returns {{ success: boolean, difficulty?: Array, error?: string }}
  */
 export const getDifficultyAnalytics = async () => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/analytics/difficulty`, {
-      method: 'GET',
-      headers: authHeaders()
-    });
+  const data = await api.get('/analytics/difficulty');
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.message || 'Failed to fetch difficulty analytics',
-        difficulty: []
-      };
-    }
-
-    return {
-      success: true,
-      difficulty: data.difficulty || data.data || []
-    };
-  } catch (error) {
-    console.error('Error fetching difficulty analytics:', error);
+  if (!data.success) {
     return {
       success: false,
-      error: 'Unable to connect to server.',
+      error: data.message || data.error || 'Failed to fetch difficulty analytics',
       difficulty: []
     };
   }
+
+  return {
+    success: true,
+    difficulty: data.difficulty || data.data || []
+  };
 };
 
 /**
@@ -193,34 +125,20 @@ export const getDifficultyAnalytics = async () => {
  * @returns {{ success: boolean, activity?: Array<{ date: string, questionsSolved: number }>, error?: string }}
  */
 export const getActivityAnalytics = async (days = 30) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/analytics/activity?days=${days}`, {
-      method: 'GET',
-      headers: authHeaders()
-    });
+  const data = await api.get(`/analytics/activity?days=${days}`);
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.message || 'Failed to fetch activity analytics',
-        activity: []
-      };
-    }
-
-    return {
-      success: true,
-      activity: data.activity || data.data || []
-    };
-  } catch (error) {
-    console.error('Error fetching activity analytics:', error);
+  if (!data.success) {
     return {
       success: false,
-      error: 'Unable to connect to server.',
+      error: data.message || data.error || 'Failed to fetch activity analytics',
       activity: []
     };
   }
+
+  return {
+    success: true,
+    activity: data.activity || data.data || []
+  };
 };
 
 /**
@@ -232,32 +150,29 @@ export const getActivityAnalytics = async (days = 30) => {
  * @returns {{ success: boolean, companies?: Array, error?: string }}
  */
 export const getCompanyAnalytics = async () => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/analytics/company`, {
-      method: 'GET',
-      headers: authHeaders()
-    });
+  const data = await api.get('/analytics/company');
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.message || 'Failed to fetch company analytics',
-        companies: []
-      };
-    }
-
-    return {
-      success: true,
-      companies: data.companies || data.data || []
-    };
-  } catch (error) {
-    console.error('Error fetching company analytics:', error);
+  if (!data.success) {
     return {
       success: false,
-      error: 'Unable to connect to server.',
+      error: data.message || data.error || 'Failed to fetch company analytics',
       companies: []
     };
   }
+
+  return {
+    success: true,
+    companies: data.companies || data.data || []
+  };
 };
+
+export const analyticsService = {
+  getAnalyticsOverview,
+  getCategoryAnalytics,
+  getTopicAnalytics,
+  getDifficultyAnalytics,
+  getActivityAnalytics,
+  getCompanyAnalytics
+};
+
+export default analyticsService;
